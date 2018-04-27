@@ -1,0 +1,7 @@
+[package]
+name = "auto_correct"
+version = "0.1.0"
+authors = ["Jacob Zuo <chopinsky@live.com>"]
+
+[dependencies]
+lazy_static = "^1.0"
