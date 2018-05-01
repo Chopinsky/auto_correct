@@ -7,8 +7,7 @@ static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
 
 fn main() {
-    auto_correct::initialize();
-
+    let correct_service = AutoCorrect::new();
     let stream = io::stdin();
     let mut input = String::new();
 

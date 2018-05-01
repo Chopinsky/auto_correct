@@ -5,3 +5,4 @@ authors = ["Jacob Zuo <chopinsky@live.com>"]
 
 [dependencies]
 lazy_static = "^1.0"
+threads_pool = "^0.1.0"
