@@ -4,20 +4,24 @@
 extern crate lazy_static;
 extern crate threads_pool;
 
+mod candidate;
+
+pub mod prelude {
+    pub use AutoCorrect;
+    pub use candidate::Candidate;
+}
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{PathBuf};
 use std::sync::{Once, ONCE_INIT, RwLock, mpsc};
-use threads_pool::*;
 
-pub mod prelude {
-    pub use AutoCorrect;
-}
+use threads_pool::*;
+use candidate::Candidate;
 
 lazy_static! {
     static ref WORDS_SET: RwLock<Box<HashMap<String, u32>>> = RwLock::new(Box::new(HashMap::new()));
-    static ref INIT: RwLock<bool> = RwLock::new(false);
 }
 
 static DICTIONARY_PATH: &'static str = "./resources/words2.txt";
@@ -34,7 +38,7 @@ pub struct AutoCorrect {
 
 impl AutoCorrect {
     pub fn new() -> AutoCorrect {
-        let pool = ThreadPool::new(3);
+        let pool = ThreadPool::new(2);
         let service = AutoCorrect {
             pool,
         };
@@ -42,10 +46,48 @@ impl AutoCorrect {
         initialize(&service);
         service
     }
+
+    pub fn candidates(&self, word: String) -> Vec<Candidate> {
+        // if already a correct word, we're done
+        if let Ok(set) = WORDS_SET.read() {
+            if set.contains_key(&word) {
+                let score = set[&word];
+                return vec![Candidate::new(word, score)];
+            }
+        }
+
+        //TODO: configure to allow search 2 edit distance?
+
+        // if a misspell, find the correct one within 1 edit distance
+        let (tx, rx) = mpsc::channel();
+
+        let tx_clone = mpsc::Sender::clone(&tx);
+        let word_clone = word.clone();
+        self.pool.execute(move || {
+            search_combo_one(word_clone, tx_clone);
+        });
+
+        self.pool.execute(move || {
+            search_combo_two(word, tx);
+        });
+
+        let mut result = Vec::new();
+        for received in rx {
+            if !result.contains(&received) {
+                result.push(received);
+            }
+        }
+
+        if result.len() > 1 {
+            result.sort_by(|a, b| b.cmp(a));
+        }
+        
+        result
+    }
 }
 
 fn initialize(service: &AutoCorrect) {
-    // if already initialized
+    // if already initialized, calling this function takes no effect
     LAUNCH.call_once(|| {
         if let Err(e) = populate_words_set(&service.pool) {
             eprintln!("Failed to initialize: {}", e);
@@ -53,10 +95,6 @@ fn initialize(service: &AutoCorrect) {
         }
 
         //TODO: if speed mode, also load the variation1 (and variation 2 if allowing 2 misses)
-
-        if let Ok(mut init) = INIT.write() {
-            *init = true;
-        }
     });
 }
 
@@ -108,6 +146,35 @@ fn open_file_async(path: &str, tx: mpsc::Sender<String>) {
             }
         }
     }
+}
+
+fn search_combo_one(word: String, tx: mpsc::Sender<Candidate>) {
+    let mut transformed: String;
+
+    if let Ok(set) = WORDS_SET.read() {
+        // deletes
+        for pos in 0..word.len() {
+            transformed = word.clone();
+            transformed.remove(pos);
+
+            if set.contains_key(&transformed) {
+                send_one_candidate(transformed, &set, &tx);
+            }
+        }
+
+        // replaces
+    }
+}
+
+fn search_combo_two(word: String, tx: mpsc::Sender<Candidate>) {
+    // transposes
+
+    // inserts
+}
+
+fn send_one_candidate(word: String, set: &Box<HashMap<String, u32>>, tx: &mpsc::Sender<Candidate>) {
+    let score = set[&word];
+    tx.send(Candidate::new(word, score)).expect("Failed to send the candidate to the caller");
 }
 
 #[cfg(test)]

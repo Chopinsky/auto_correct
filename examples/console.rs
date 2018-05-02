@@ -23,7 +23,11 @@ fn main() {
                 }
 
                 //TODO: check word correction here
-                println!("{}\n", input);
+                println!("Input as: {}\n", input);
+
+                let check = input.clone();
+                let result = correct_service.candidates(check);
+                println!("Output as: {:?}\n", result);
 
                 input.clear();
             },
