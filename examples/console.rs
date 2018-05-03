@@ -1,7 +1,9 @@
 extern crate auto_correct;
 
 use std::io;
-use auto_correct::*;
+use std::ops::Div;
+use std::time::{SystemTime};
+use auto_correct::prelude::*;
 
 static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
@@ -25,8 +27,19 @@ fn main() {
                 //TODO: check word correction here
                 println!("Input as: {}\n", input);
 
-                let check = input.clone();
-                let result = correct_service.candidates(check);
+                let mut result: Vec<Candidate> = Vec::new();
+                let now = SystemTime::now();
+
+                // run multiple times to benchmark
+                for _i in 0..20 {
+                    let check = input.clone();
+                    result = correct_service.candidates(check);
+                }
+
+                if let Ok(t) = now.elapsed() {
+                    println!("Time elapsed: {:?}", t.div(20));
+                }
+
                 println!("Output as: {:?}\n", result);
 
                 input.clear();

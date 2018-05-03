@@ -4,13 +4,15 @@ use std::cmp::Ordering;
 pub struct Candidate {
     pub word: String,
     pub score: u32,
+    pub edit: u8,
 }
 
 impl Candidate {
-    pub fn new(word: String, score: u32) -> Self {
+    pub fn new(word: String, score: u32, edit: u8) -> Self {
         Candidate {
             word,
             score,
+            edit,
         }
     }
 
@@ -24,6 +26,7 @@ impl Clone for Candidate {
         Candidate {
             word: self.word.clone(),
             score: self.score,
+            edit: self.edit,
         }
     }
 }
