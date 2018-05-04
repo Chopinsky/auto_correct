@@ -7,6 +7,7 @@ use auto_correct::prelude::*;
 
 static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
+static LEN: u8 = 20;
 
 fn main() {
     let correct_service = AutoCorrect::new();
@@ -31,7 +32,7 @@ fn main() {
                 let now = SystemTime::now();
 
                 // run multiple times to benchmark
-                for _i in 0..20 {
+                for _i in 0..LEN {
                     let check = input.clone();
                     result = correct_service.candidates(check);
                 }
