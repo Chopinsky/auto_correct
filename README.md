@@ -8,3 +8,6 @@
 [cratesio-image]: https://img.shields.io/crates/v/auto_correct.svg
 [docsrs-image]: https://docs.rs/auto_correct/badge.svg
 [docsrs]: https://docs.rs/auto_correct
+
+## What is this
+This library will provide auto correction suggestions on English words within 1 edit distance.
