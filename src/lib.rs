@@ -18,7 +18,6 @@ use candidate::Candidate;
 
 //TODO: define config struct -- 1. memory mode vs. speed mode; 2. one miss vs. two misses
 //TODO: customizable score function
-//TODO: sort_by(|a, b| b.cmp(a));  <-- reverse sort, aka large elements at the front row
 
 pub struct AutoCorrect {
     pub max_edit: u8,
@@ -32,10 +31,7 @@ impl AutoCorrect {
         //TODO: if speed mode, also load the variation1 (and variation 2 if allowing 2 misses)
         dynamic_mode::initialize(&pool);
 
-        AutoCorrect {
-            pool,
-            max_edit: 1,
-        }
+        AutoCorrect { pool, max_edit: 1 }
     }
 
     pub fn candidates(&self, word: String) -> Vec<Candidate> {

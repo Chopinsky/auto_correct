@@ -1,6 +1,5 @@
-
 use std::collections::{HashMap, HashSet};
-use std::sync::{Once, ONCE_INIT, RwLock, mpsc};
+use std::sync::{mpsc, Once, RwLock, ONCE_INIT};
 
 use threads_pool::*;
 use candidate::Candidate;
@@ -22,7 +21,12 @@ pub fn initialize(pool: &ThreadPool) {
     });
 }
 
-pub fn candidate(word: String, current_edit: u8, max_edit: u8, pool: &ThreadPool) -> Vec<Candidate> {
+pub fn candidate(
+    word: String,
+    current_edit: u8,
+    max_edit: u8,
+    pool: &ThreadPool,
+) -> Vec<Candidate> {
     if current_edit >= max_edit {
         return Vec::new();
     }
@@ -103,7 +107,12 @@ fn populate_words_set(pool: &ThreadPool) -> Result<(), String> {
     Err(String::from("Unable to write to the words set..."))
 }
 
-fn delete_n_replace(word: String, current_edit: u8, tx: mpsc::Sender<Candidate>, tx_two: Option<mpsc::Sender<HashSet<String>>>) {
+fn delete_n_replace(
+    word: String,
+    current_edit: u8,
+    tx: mpsc::Sender<Candidate>,
+    tx_two: Option<mpsc::Sender<HashSet<String>>>,
+) {
     if let Ok(set) = WORDS_SET.read() {
         let edit_two = tx_two.is_some();
 
@@ -145,12 +154,19 @@ fn delete_n_replace(word: String, current_edit: u8, tx: mpsc::Sender<Candidate>,
         }
 
         if let Some(tx_edit_two) = tx_two {
-            tx_edit_two.send(next_set).expect("Failed to send the candidate to the caller");
+            tx_edit_two
+                .send(next_set)
+                .expect("Failed to send the candidate to the caller");
         }
     }
 }
 
-fn transpose_n_insert(word: String, current_edit: u8, tx: mpsc::Sender<Candidate>, tx_two: Option<mpsc::Sender<HashSet<String>>>) {
+fn transpose_n_insert(
+    word: String,
+    current_edit: u8,
+    tx: mpsc::Sender<Candidate>,
+    tx_two: Option<mpsc::Sender<HashSet<String>>>,
+) {
     if let Ok(set) = WORDS_SET.read() {
         let edit_two = tx_two.is_some();
 
@@ -163,7 +179,7 @@ fn transpose_n_insert(word: String, current_edit: u8, tx: mpsc::Sender<Candidate
             base = word.clone();
 
             removed = base.remove(pos);
-            base.insert(pos-1, removed);
+            base.insert(pos - 1, removed);
 
             if edit_two && !base.is_empty() {
                 next_set.insert(base.clone());
@@ -173,9 +189,9 @@ fn transpose_n_insert(word: String, current_edit: u8, tx: mpsc::Sender<Candidate
                 send_one_candidate(base, current_edit, &set, &tx);
             }
         }
-        
+
         // inserts
-        for pos in 0..word.len()+1 {
+        for pos in 0..word.len() + 1 {
             for chara in ALPHABET.chars() {
                 base = word.clone();
                 base.insert(pos, chara);
@@ -191,7 +207,9 @@ fn transpose_n_insert(word: String, current_edit: u8, tx: mpsc::Sender<Candidate
         }
 
         if let Some(tx_edit_two) = tx_two {
-            tx_edit_two.send(next_set).expect("Failed to send the candidate to the caller");
+            tx_edit_two
+                .send(next_set)
+                .expect("Failed to send the candidate to the caller");
         }
     }
 }

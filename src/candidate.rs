@@ -9,11 +9,7 @@ pub struct Candidate {
 
 impl Candidate {
     pub fn new(word: String, score: u32, edit: u8) -> Self {
-        Candidate {
-            word,
-            score,
-            edit,
-        }
+        Candidate { word, score, edit }
     }
 
     pub fn get_word(&self) -> String {
