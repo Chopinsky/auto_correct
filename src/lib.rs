@@ -1,5 +1,8 @@
 #![allow(dead_code)]
 
+//! This library provides auto-correct suggestions that are within 1 edit distance from
+//! known English words.
+
 #[macro_use]
 extern crate lazy_static;
 extern crate threads_pool;
