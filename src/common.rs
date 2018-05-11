@@ -1,14 +1,18 @@
+#![allow(unused_variables)]
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::str::Chars;
 use std::sync::mpsc;
 
+use super::SupportedLocale;
 use candidate::Candidate;
 
-pub static ALPHABET: &'static str = "abcdefghijklmnopqrstuvwxyz";
-pub static DICTIONARY_PATH: &'static str = "./resources/words2.txt";
 pub static DELIM: &'static str = "^";
+pub static DEFAULT_LOCALE: &'static str = "en-us";
+static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
 pub fn send_one_candidate(
     word: String,
@@ -21,7 +25,9 @@ pub fn send_one_candidate(
         .expect("Failed to send the candidate to the caller");
 }
 
-pub fn open_file_async(path: &str, tx: mpsc::Sender<String>) {
+pub fn open_file_async(locale: SupportedLocale, tx: mpsc::Sender<String>) {
+    let path = get_dict_path(locale);
+
     if path.is_empty() {
         return;
     }
@@ -40,5 +46,21 @@ pub fn open_file_async(path: &str, tx: mpsc::Sender<String>) {
                 println!("Unable to read the line from the file: {}", err);
             }
         }
+    }
+}
+
+pub fn get_dict_path(locale: SupportedLocale) -> String {
+    let locale = match locale {
+        SupportedLocale::EnUs => "en-us",
+        _ => "en-us",
+    };
+
+    format!("./resources/{}/words2.txt", locale)
+}
+
+pub fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {
+    match locale {
+        &SupportedLocale::EnUs => ALPHABET_EN.chars(),
+        _ => ALPHABET_EN.chars(),
     }
 }

@@ -22,22 +22,39 @@ use candidate::Candidate;
 //TODO: define config struct -- 1. memory mode vs. speed mode; 2. one miss vs. two misses
 //TODO: customizable score function
 
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum SupportedLocale {
+    EnUs,
+}
+
 pub struct AutoCorrect {
     pub max_edit: u8,
     pool: ThreadPool,
+    locale: SupportedLocale,
 }
 
 impl AutoCorrect {
     pub fn new() -> AutoCorrect {
+        AutoCorrect::new_with_locale(SupportedLocale::EnUs)
+    }
+
+    // TODO: make this public when more locale dict are added
+    fn new_with_locale(locale: SupportedLocale) -> AutoCorrect {
         let pool = ThreadPool::new(2);
 
-        //TODO: if speed mode, also load the variation1 (and variation 2 if allowing 2 misses)
-        dynamic_mode::initialize(&pool);
+        let service = AutoCorrect {
+            max_edit: 2,
+            pool,
+            locale,
+        };
 
-        AutoCorrect { pool, max_edit: 1 }
+        //TODO: if speed mode, also load the variation1 (and variation 2 if allowing 2 misses)
+        dynamic_mode::initialize(&service);
+
+        service
     }
 
     pub fn candidates(&self, word: String) -> Vec<Candidate> {
-        dynamic_mode::candidate(word, 0, self.max_edit, &self.pool)
+        dynamic_mode::candidate(self.locale.clone(), word, 0, self.max_edit, &self.pool)
     }
 }

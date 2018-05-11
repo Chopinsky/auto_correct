@@ -1,9 +1,11 @@
+
 use std::collections::{HashMap, HashSet};
 use std::sync::{mpsc, Once, RwLock, ONCE_INIT};
 
-use threads_pool::*;
+use super::{AutoCorrect, SupportedLocale};
 use candidate::Candidate;
 use common::*;
+use threads_pool::*;
 
 lazy_static! {
     static ref WORDS_SET: RwLock<Box<HashMap<String, u32>>> = RwLock::new(Box::new(HashMap::new()));
@@ -11,10 +13,10 @@ lazy_static! {
 
 static LAUNCH: Once = ONCE_INIT;
 
-pub fn initialize(pool: &ThreadPool) {
+pub fn initialize(service: &AutoCorrect) {
     // if already initialized, calling this function takes no effect
     LAUNCH.call_once(|| {
-        if let Err(e) = populate_words_set(pool) {
+        if let Err(e) = populate_words_set(&service.pool, service.locale.clone()) {
             eprintln!("Failed to initialize: {}", e);
             return;
         }
@@ -22,6 +24,7 @@ pub fn initialize(pool: &ThreadPool) {
 }
 
 pub fn candidate(
+    locale: SupportedLocale,
     word: String,
     current_edit: u8,
     max_edit: u8,
@@ -49,24 +52,35 @@ pub fn candidate(
     let (tx, rx) = mpsc::channel();
     let current_edit = current_edit + 1;
 
+    let (tx_two, tx_two_clone, rx_two) = if current_edit < max_edit {
+        let (tx_raw, rx_raw) = mpsc::channel();
+        let tx_raw_clone = mpsc::Sender::clone(&tx_raw);
+        (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
+    } else {
+        (None, None, None)
+    };
+
     let tx_clone = mpsc::Sender::clone(&tx);
     let word_clone = word.clone();
+    let locale_clone = locale.clone();
     pool.execute(move || {
-        delete_n_replace(word_clone, current_edit, tx_clone, None);
+        delete_n_replace(locale_clone, word_clone, current_edit, tx_clone, tx_two_clone);
     });
 
     pool.execute(move || {
-        transpose_n_insert(word, current_edit, tx, None);
+        transpose_n_insert(locale, word, current_edit, tx, tx_two);
     });
+
+    //TODO: receive rx_two and initiate recursive call
 
     let mut result = Vec::new();
     for received in rx {
+        println!("Count: {} vs. {}", current_edit, max_edit);
+
         if !result.contains(&received) {
             result.push(received);
         }
     }
-
-    //TODO: if current_edit < max_edit, recursive call candidate on every entry in the result vector
 
     if result.len() > 1 {
         result.sort_by(|a, b| b.cmp(a));
@@ -75,12 +89,12 @@ pub fn candidate(
     result
 }
 
-fn populate_words_set(pool: &ThreadPool) -> Result<(), String> {
+fn populate_words_set(pool: &ThreadPool, locale: SupportedLocale) -> Result<(), String> {
     if let Ok(mut set) = WORDS_SET.write() {
         let (tx, rx) = mpsc::channel();
 
         pool.execute(move || {
-            open_file_async(DICTIONARY_PATH, tx);
+            open_file_async(locale, tx);
         });
 
         for received in rx {
@@ -108,6 +122,7 @@ fn populate_words_set(pool: &ThreadPool) -> Result<(), String> {
 }
 
 fn delete_n_replace(
+    locale: SupportedLocale,
     word: String,
     current_edit: u8,
     tx: mpsc::Sender<Candidate>,
@@ -131,7 +146,7 @@ fn delete_n_replace(
             }
 
             // replaces
-            for chara in ALPHABET.chars() {
+            for chara in get_char_set(&locale) {
                 if chara == removed {
                     continue;
                 }
@@ -162,6 +177,7 @@ fn delete_n_replace(
 }
 
 fn transpose_n_insert(
+    locale: SupportedLocale,
     word: String,
     current_edit: u8,
     tx: mpsc::Sender<Candidate>,
@@ -192,7 +208,7 @@ fn transpose_n_insert(
 
         // inserts
         for pos in 0..word.len() + 1 {
-            for chara in ALPHABET.chars() {
+            for chara in get_char_set(&locale) {
                 base = word.clone();
                 base.insert(pos, chara);
 
