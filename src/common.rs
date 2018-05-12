@@ -25,6 +25,14 @@ pub fn send_one_candidate(
         .expect("Failed to send the candidate to the caller");
 }
 
+pub fn send_next_string(word: String, tx: &Option<mpsc::Sender<String>>) {
+    if let Some(tx_next) = tx {
+        tx_next
+            .send(word)
+            .expect("Failed to send the candidate to the caller");
+    }
+}
+
 pub fn open_file_async(locale: SupportedLocale, tx: mpsc::Sender<String>) {
     let path = get_dict_path(locale);
 

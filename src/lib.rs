@@ -16,11 +16,13 @@ pub mod prelude {
     pub use candidate::Candidate;
 }
 
-use threads_pool::*;
 use candidate::Candidate;
+use threads_pool::*;
 
 //TODO: define config struct -- 1. memory mode vs. speed mode; 2. one miss vs. two misses
 //TODO: customizable score function
+
+static MAX_EDIT: u8 = 2;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum SupportedLocale {
@@ -40,10 +42,19 @@ impl AutoCorrect {
 
     // TODO: make this public when more locale dict are added
     fn new_with_locale(locale: SupportedLocale) -> AutoCorrect {
+        // max edit only allowed between 1 and 3
+        let max_edit = if MAX_EDIT > 3 {
+            3
+        } else if MAX_EDIT < 1 {
+            1
+        } else {
+            MAX_EDIT
+        };
+
         let pool = ThreadPool::new(2);
 
         let service = AutoCorrect {
-            max_edit: 2,
+            max_edit,
             pool,
             locale,
         };

@@ -1,5 +1,4 @@
-
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{mpsc, Once, RwLock, ONCE_INIT};
 
 use super::{AutoCorrect, SupportedLocale};
@@ -64,29 +63,73 @@ pub fn candidate(
     let word_clone = word.clone();
     let locale_clone = locale.clone();
     pool.execute(move || {
-        delete_n_replace(locale_clone, word_clone, current_edit, tx_clone, tx_two_clone);
+        delete_n_replace(
+            locale_clone,
+            word_clone,
+            current_edit,
+            tx_clone,
+            tx_two_clone,
+        );
     });
 
     pool.execute(move || {
         transpose_n_insert(locale, word, current_edit, tx, tx_two);
     });
 
-    //TODO: receive rx_two and initiate recursive call
+    let rx_next: Option<mpsc::Receiver<Vec<Candidate>>> = if let Some(rx_chl) = rx_two {
+        let (tx_raw, rx_raw) = mpsc::channel();
+        pool.execute(move || {
+            find_next_edit_candidates(locale, current_edit, max_edit, rx_chl, tx_raw);
+        });
 
-    let mut result = Vec::new();
+        Some(rx_raw)
+    } else {
+        None
+    };
+
+    let mut results = Vec::new();
     for received in rx {
-        println!("Count: {} vs. {}", current_edit, max_edit);
-
-        if !result.contains(&received) {
-            result.push(received);
+        if !results.contains(&received) {
+            results.push(received);
         }
     }
 
-    if result.len() > 1 {
-        result.sort_by(|a, b| b.cmp(a));
+    //TODO: merge rx_raw results with result
+
+    if results.len() > 1 {
+        results.sort_by(|a, b| b.cmp(a));
     }
 
-    result
+    results
+}
+
+fn find_next_edit_candidates(
+    locale: SupportedLocale,
+    current_edit: u8,
+    max_edit: u8,
+    rx_chl: mpsc::Receiver<String>,
+    tx: mpsc::Sender<Vec<Candidate>>,
+) {
+    let mut candidates = Vec::new();
+    let next_pool = ThreadPool::new(4);
+
+    for next in rx_chl {
+        let mut new_candidates = candidate(locale, next, current_edit, max_edit, &next_pool);
+        loop {
+            if new_candidates.is_empty() {
+                break;
+            }
+
+            if let Some(next_candidate) = new_candidates.pop() {
+                if !candidates.contains(&next_candidate) {
+                    candidates.push(next_candidate);
+                }
+            }
+        }
+    }
+
+    tx.send(candidates)
+        .expect("Failed to send the next round of candidates");
 }
 
 fn populate_words_set(pool: &ThreadPool, locale: SupportedLocale) -> Result<(), String> {
@@ -126,12 +169,11 @@ fn delete_n_replace(
     word: String,
     current_edit: u8,
     tx: mpsc::Sender<Candidate>,
-    tx_two: Option<mpsc::Sender<HashSet<String>>>,
+    tx_two: Option<mpsc::Sender<String>>,
 ) {
     if let Ok(set) = WORDS_SET.read() {
         let edit_two = tx_two.is_some();
 
-        let mut next_set: HashSet<String> = HashSet::new();
         let mut base: String;
         let mut replace: String;
         let mut removed: char;
@@ -142,7 +184,7 @@ fn delete_n_replace(
             removed = base.remove(pos);
 
             if edit_two && !base.is_empty() {
-                next_set.insert(base.clone());
+                send_next_string(base.clone(), &tx_two);
             }
 
             // replaces
@@ -155,7 +197,7 @@ fn delete_n_replace(
                 replace.insert(pos, chara);
 
                 if edit_two {
-                    next_set.insert(replace.clone());
+                    send_next_string(replace.clone(), &tx_two);
                 }
 
                 if set.contains_key(&replace) {
@@ -167,12 +209,6 @@ fn delete_n_replace(
                 send_one_candidate(base, current_edit, &set, &tx);
             }
         }
-
-        if let Some(tx_edit_two) = tx_two {
-            tx_edit_two
-                .send(next_set)
-                .expect("Failed to send the candidate to the caller");
-        }
     }
 }
 
@@ -181,12 +217,11 @@ fn transpose_n_insert(
     word: String,
     current_edit: u8,
     tx: mpsc::Sender<Candidate>,
-    tx_two: Option<mpsc::Sender<HashSet<String>>>,
+    tx_two: Option<mpsc::Sender<String>>,
 ) {
     if let Ok(set) = WORDS_SET.read() {
         let edit_two = tx_two.is_some();
 
-        let mut next_set: HashSet<String> = HashSet::new();
         let mut base: String;
         let mut removed: char;
 
@@ -198,7 +233,7 @@ fn transpose_n_insert(
             base.insert(pos - 1, removed);
 
             if edit_two && !base.is_empty() {
-                next_set.insert(base.clone());
+                send_next_string(base.clone(), &tx_two);
             }
 
             if set.contains_key(&base) {
@@ -213,19 +248,13 @@ fn transpose_n_insert(
                 base.insert(pos, chara);
 
                 if edit_two {
-                    next_set.insert(base.clone());
+                    send_next_string(base.clone(), &tx_two);
                 }
 
                 if set.contains_key(&base) {
                     send_one_candidate(base, current_edit, &set, &tx);
                 }
             }
-        }
-
-        if let Some(tx_edit_two) = tx_two {
-            tx_edit_two
-                .send(next_set)
-                .expect("Failed to send the candidate to the caller");
         }
     }
 }
