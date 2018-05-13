@@ -3,7 +3,10 @@ name = "auto_correct"
 version = "0.1.0"
 authors = ["Jacob Zuo <chopinsky@live.com>"]
 description = "A library to provide auto correct suggestions. Currently supporting EN-US."
+documentation = "https://docs.rs/auto_correct/"
+repository = "https://github.com/Chopinsky/auto_correct.git"
 readme = "README.md"
+license = "MIT"
 
 [dependencies]
 lazy_static = "^1.0"

@@ -10,7 +10,7 @@
 [docsrs]: https://docs.rs/auto_correct
 
 ## What is this
-This library will provide auto correction suggestions on English words within 1 edit distance.
+This library provides auto correction suggestions on English words within 1 edit distance.
 
 ## How to use
 In your project's `Cargo.toml`, add dependency:
