@@ -2,6 +2,8 @@
 name = "auto_correct"
 version = "0.1.0"
 authors = ["Jacob Zuo <chopinsky@live.com>"]
+description = "A library to provide auto correct suggestions. Currently supporting EN-US."
+readme = "README.md"
 
 [dependencies]
 lazy_static = "^1.0"

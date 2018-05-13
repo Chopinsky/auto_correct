@@ -28,20 +28,23 @@ fn main() {
                 //TODO: check word correction here
                 println!("Input as: {}\n", input);
 
-                let mut result: Vec<Candidate> = Vec::new();
+                let mut results: Vec<Candidate> = Vec::new();
                 let now = SystemTime::now();
 
                 // run multiple times to benchmark
                 for _i in 0..LEN {
                     let check = input.clone();
-                    result = correct_service.candidates(check);
+                    results = correct_service.candidates(check);
                 }
 
                 if let Ok(t) = now.elapsed() {
                     println!("Time elapsed: {:?}", t.div(20));
                 }
 
-                println!("Output as: {:?}\n", result);
+                for idx in 0..results.len() {
+                    println!("Suggestion #{}: {}; Score: {}; Edit Distance: {}",
+                             idx, results[idx].word, results[idx].score, results[idx].edit);
+                }
 
                 input.clear();
             },
