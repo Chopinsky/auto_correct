@@ -29,7 +29,11 @@ impl Clone for Candidate {
 
 impl Ord for Candidate {
     fn cmp(&self, other: &Candidate) -> Ordering {
-        self.score.cmp(&other.score)
+        if self.edit == other.edit {
+            self.score.cmp(&other.score)
+        } else {
+            other.edit.cmp(&self.edit)
+        }
     }
 }
 

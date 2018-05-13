@@ -51,41 +51,44 @@ pub fn candidate(
     let (tx, rx) = mpsc::channel();
     let current_edit = current_edit + 1;
 
-    let (tx_two, tx_two_clone, rx_two) = if current_edit < max_edit {
-        let (tx_raw, rx_raw) = mpsc::channel();
-        let tx_raw_clone = mpsc::Sender::clone(&tx_raw);
-        (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
-    } else {
-        (None, None, None)
-    };
+    let (tx_next, tx_next_clone, rx_next) =
+        if current_edit < max_edit {
+            let (tx_raw, rx_raw) = mpsc::channel();
+            let tx_raw_clone = mpsc::Sender::clone(&tx_raw);
+            (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
+        } else {
+            (None, None, None)
+        };
 
     let tx_clone = mpsc::Sender::clone(&tx);
     let word_clone = word.clone();
     let locale_clone = locale.clone();
+
     pool.execute(move || {
         delete_n_replace(
             locale_clone,
             word_clone,
             current_edit,
             tx_clone,
-            tx_two_clone,
+            tx_next_clone,
         );
     });
 
     pool.execute(move || {
-        transpose_n_insert(locale, word, current_edit, tx, tx_two);
+        transpose_n_insert(locale, word, current_edit, tx, tx_next);
     });
 
-    let rx_next: Option<mpsc::Receiver<Vec<Candidate>>> = if let Some(rx_chl) = rx_two {
-        let (tx_raw, rx_raw) = mpsc::channel();
-        pool.execute(move || {
-            find_next_edit_candidates(locale, current_edit, max_edit, rx_chl, tx_raw);
-        });
+    let rx_next =
+        if let Some(rx_chl) = rx_next {
+            let (tx_raw, rx_raw) = mpsc::channel();
+            pool.execute(move || {
+                find_next_edit_candidates(locale, current_edit, max_edit, rx_chl, tx_raw);
+            });
 
-        Some(rx_raw)
-    } else {
-        None
-    };
+            Some(rx_raw)
+        } else {
+            None
+        };
 
     let mut results = Vec::new();
     for received in rx {
@@ -94,7 +97,26 @@ pub fn candidate(
         }
     }
 
-    //TODO: merge rx_raw results with result
+    if let Some(rx) = rx_next {
+        for mut received in rx {
+            let space = results.capacity() - results.len();
+            if space < received.len() {
+                results.reserve(received.len());
+            }
+
+            loop {
+                if received.is_empty() {
+                    break;
+                }
+
+                if let Some(candidate) = received.pop() {
+                    if !results.contains(&candidate) {
+                        results.push(candidate);
+                    }
+                }
+            }
+        }
+    }
 
     if results.len() > 1 {
         results.sort_by(|a, b| b.cmp(a));
@@ -115,6 +137,12 @@ fn find_next_edit_candidates(
 
     for next in rx_chl {
         let mut new_candidates = candidate(locale, next, current_edit, max_edit, &next_pool);
+
+        let space = candidates.capacity() - candidates.len();
+        if space < new_candidates.len() {
+            candidates.reserve(new_candidates.len());
+        }
+
         loop {
             if new_candidates.is_empty() {
                 break;
