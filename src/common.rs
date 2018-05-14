@@ -1,4 +1,4 @@
-#![allow(unused_variables)]
+#![allow(unreachable_patterns)]
 
 use std::collections::HashMap;
 use std::fs::File;
