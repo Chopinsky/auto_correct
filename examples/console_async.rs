@@ -2,12 +2,12 @@ extern crate auto_correct;
 
 use std::io;
 use std::ops::Div;
+use std::sync::mpsc;
 use std::time::{SystemTime};
 use auto_correct::prelude::*;
 
 static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
-static LEN: u8 = 20;
 
 fn main() {
     let mut correct_service = AutoCorrect::new();
@@ -29,25 +29,28 @@ fn main() {
 
                 println!("\nInput as: {}\n", input);
 
-                let mut results: Vec<Candidate> = Vec::new();
-                let now = SystemTime::now();
-
                 // run multiple times to benchmark
-                for _i in 0..LEN {
-                    let check = input.clone();
-                    results = correct_service.candidates(check);
+                let check = input.clone();
+                let (tx, rx) = mpsc::channel();
+
+                let now = SystemTime::now();
+                correct_service.candidates_async(check, tx);
+
+                let mut count = 5;
+                for result in rx {
+                    println!("Suggestion: {}; Score: {}; Edit Distance: {}",
+                             result.word, result.score, result.edit);
+
+                    count -= 1;
+                    if count == 0 {
+                        break;
+                    }
                 }
 
                 if let Ok(t) = now.elapsed() {
-                    println!("Time elapsed: {:?}\n\nResults:", t.div(20));
+                    println!("\nTime elapsed: {:?}\n====================\n", t.div(1));
                 }
 
-                for idx in 0..results.len() {
-                    println!("Suggestion #{}: {}; Score: {}; Edit Distance: {}",
-                             idx, results[idx].word, results[idx].score, results[idx].edit);
-                }
-
-                println!("\n=========================\n");
                 input.clear();
             },
             Err(error) => {

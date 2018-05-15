@@ -57,11 +57,17 @@ impl AutoCorrect {
     }
 
     pub fn candidates(&self, word: String) -> Vec<Candidate> {
-        dynamic_mode::candidate(self.locale.clone(), word, 0, self.max_edit, &self.pool)
+        dynamic_mode::candidate(word, self.locale.clone(), 0, self.max_edit, &self.pool, None)
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
-        //TODO: async mode -- send Candidate once found one
+        let locale = self.locale.clone();
+        let max_edit = self.max_edit;
+
+        self.pool.execute(move || {
+            let async_pool = ThreadPool::new(2);
+            dynamic_mode::candidate(word, locale, 0, max_edit, &async_pool, Some(tx));
+        });
     }
 
     pub fn set_max_edit(&mut self, max_edit: u8) {

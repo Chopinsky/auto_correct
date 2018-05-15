@@ -23,11 +23,12 @@ pub fn initialize(service: &AutoCorrect) {
 }
 
 pub fn candidate(
-    locale: SupportedLocale,
     word: String,
+    locale: SupportedLocale,
     current_edit: u8,
     max_edit: u8,
     pool: &ThreadPool,
+    mut tx_async: Option<mpsc::Sender<Candidate>>,
 ) -> Vec<Candidate> {
     if current_edit >= max_edit {
         return Vec::new();
@@ -81,8 +82,10 @@ pub fn candidate(
     let rx_next =
         if let Some(rx_chl) = rx_next {
             let (tx_raw, rx_raw) = mpsc::channel();
+            let tx_async_clone = tx_async.clone();
+
             pool.execute(move || {
-                find_next_edit_candidates(locale, current_edit, max_edit, rx_chl, tx_raw);
+                find_next_edit_candidates(locale, current_edit, max_edit, rx_chl, tx_raw, tx_async_clone);
             });
 
             Some(rx_raw)
@@ -91,9 +94,10 @@ pub fn candidate(
         };
 
     let mut results = Vec::new();
-    for received in rx {
-        if !results.contains(&received) {
-            results.push(received);
+    for candidate in rx {
+        if !update_or_send(&mut results, candidate, &tx_async) {
+            // if caller has dropped the channel before getting all results, stop trying to send
+            tx_async = None;
         }
     }
 
@@ -110,8 +114,9 @@ pub fn candidate(
                 }
 
                 if let Some(candidate) = received.pop() {
-                    if !results.contains(&candidate) {
-                        results.push(candidate);
+                    if !update_or_send(&mut results, candidate, &tx_async) {
+                        // if caller has dropped the channel before getting all results, stop trying to send
+                        tx_async = None;
                     }
                 }
             }
@@ -125,18 +130,39 @@ pub fn candidate(
     results
 }
 
+fn update_or_send(
+    results: &mut Vec<Candidate>,
+    candidate: Candidate,
+    tx: &Option<mpsc::Sender<Candidate>>) -> bool {
+
+    if !results.contains(&candidate) {
+        results.push(candidate.clone());
+        if let Some(tx_async) = tx {
+            if let Err(_) = tx_async.send(candidate) {
+                // if error, means caller has closed the channel
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
 fn find_next_edit_candidates(
     locale: SupportedLocale,
     current_edit: u8,
     max_edit: u8,
     rx_chl: mpsc::Receiver<String>,
     tx: mpsc::Sender<Vec<Candidate>>,
+    tx_async: Option<mpsc::Sender<Candidate>>
 ) {
     let mut candidates = Vec::new();
     let next_pool = ThreadPool::new(4);
 
     for next in rx_chl {
-        let mut new_candidates = candidate(locale, next, current_edit, max_edit, &next_pool);
+        let tx_async_clone = tx_async.clone();
+        let mut new_candidates =
+            candidate(next, locale, current_edit, max_edit, &next_pool, tx_async_clone);
 
         let space = candidates.capacity() - candidates.len();
         if space < new_candidates.len() {
