@@ -13,10 +13,11 @@ mod dynamic_mode;
 
 pub mod prelude {
     pub use AutoCorrect;
+    pub use AutoCorrectConfig;
     pub use candidate::Candidate;
 }
 
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use candidate::Candidate;
 use threads_pool::*;
 
@@ -33,20 +34,24 @@ pub enum SupportedLocale {
 
 pub struct AutoCorrect {
     max_edit: u8,
-    pool: ThreadPool,
+    pool: Arc<ThreadPool>,
     locale: SupportedLocale,
 }
 
 impl AutoCorrect {
     pub fn new() -> AutoCorrect {
-        AutoCorrect::new_with_locale(SupportedLocale::EnUs)
+        AutoCorrect::new_with_locale(SupportedLocale::EnUs, DEFAULT_MAX_EDIT)
+    }
+
+    pub fn new_with_max_edit(max_edit: u8) -> AutoCorrect {
+        AutoCorrect::new_with_locale(SupportedLocale::EnUs, max_edit)
     }
 
     // TODO: make this public when more locale dict are added
-    fn new_with_locale(locale: SupportedLocale) -> AutoCorrect {
+    fn new_with_locale(locale: SupportedLocale, max_edit: u8) -> AutoCorrect {
         let service = AutoCorrect {
-            max_edit: DEFAULT_MAX_EDIT,
-            pool: ThreadPool::new(2),
+            max_edit,
+            pool: Arc::new(ThreadPool::new(2)),
             locale,
         };
 
@@ -57,30 +62,29 @@ impl AutoCorrect {
     }
 
     pub fn candidates(&self, word: String) -> Vec<Candidate> {
-        dynamic_mode::candidate(word, self.locale.clone(), 0, self.max_edit, &self.pool, None)
+        dynamic_mode::candidate(
+            word,
+            self.locale.clone(),
+            0,
+            self.max_edit,
+            Arc::clone(&self.pool),
+            None)
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
         let locale = self.locale.clone();
         let max_edit = self.max_edit;
+        let pool_arc = Arc::clone(&self.pool);
 
         self.pool.execute(move || {
-            let async_pool = ThreadPool::new(2);
-            dynamic_mode::candidate(word, locale, 0, max_edit, &async_pool, Some(tx));
+            dynamic_mode::candidate(
+                word,
+                locale,
+                0,
+                max_edit,
+                pool_arc,
+                Some(tx));
         });
-    }
-
-    pub fn set_max_edit(&mut self, max_edit: u8) {
-        // max edit only allowed between 1 and 3
-        self.max_edit = if max_edit > MAX_EDIT_THRESHOLD {
-            eprintln!("Only support max edits less or equal to {}.", MAX_EDIT_THRESHOLD);
-            3
-        } else if max_edit < 1 {
-            eprintln!("Only support max edits greater or equal to 1.");
-            1
-        } else {
-            max_edit
-        };
     }
 
     #[inline]
@@ -91,5 +95,24 @@ impl AutoCorrect {
     #[inline]
     pub fn get_locale_in_use(&self) -> SupportedLocale {
         self.locale.clone()
+    }
+}
+
+pub trait AutoCorrectConfig {
+    fn set_max_edit(&mut self, max_edit: u8);
+}
+
+impl AutoCorrectConfig for AutoCorrect {
+    fn set_max_edit(&mut self, max_edit: u8) {
+        // max edit only allowed between 1 and 3
+        self.max_edit = if max_edit > MAX_EDIT_THRESHOLD {
+            eprintln!("Only support max edits less or equal to {}.", MAX_EDIT_THRESHOLD);
+            3
+        } else if max_edit < 1 {
+            eprintln!("Only support max edits greater or equal to 1.");
+            1
+        } else {
+            max_edit
+        };
     }
 }

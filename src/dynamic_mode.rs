@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{mpsc, Once, RwLock, ONCE_INIT};
+use std::sync::{mpsc, Arc, Once, RwLock, ONCE_INIT};
 
 use super::{AutoCorrect, SupportedLocale};
 use candidate::Candidate;
@@ -27,7 +27,7 @@ pub fn candidate(
     locale: SupportedLocale,
     current_edit: u8,
     max_edit: u8,
-    pool: &ThreadPool,
+    pool: Arc<ThreadPool>,
     mut tx_async: Option<mpsc::Sender<Candidate>>,
 ) -> Vec<Candidate> {
     if current_edit >= max_edit {
@@ -44,7 +44,15 @@ pub fn candidate(
         if set.contains_key(&word) {
             // TODO: keep searching even if word is a correct word
             let score = set[&word];
-            return vec![Candidate::new(word, score, current_edit)];
+            let candidate = Candidate::new(word, score, current_edit);
+
+            if let Some(tx) = tx_async.take() {
+                if let Err(_) = tx.send(candidate.clone()) {
+                    // if we shall continue the search, should reset tx_async to None then.
+                }
+            }
+
+            return vec![candidate];
         }
     }
 
@@ -157,12 +165,12 @@ fn find_next_edit_candidates(
     tx_async: Option<mpsc::Sender<Candidate>>
 ) {
     let mut candidates = Vec::new();
-    let next_pool = ThreadPool::new(4);
+    let next_pool = Arc::new(ThreadPool::new(4));
 
     for next in rx_chl {
         let tx_async_clone = tx_async.clone();
         let mut new_candidates =
-            candidate(next, locale, current_edit, max_edit, &next_pool, tx_async_clone);
+            candidate(next, locale, current_edit, max_edit, Arc::clone(&next_pool), tx_async_clone);
 
         let space = candidates.capacity() - candidates.len();
         if space < new_candidates.len() {

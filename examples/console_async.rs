@@ -10,9 +10,7 @@ static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
 
 fn main() {
-    let mut correct_service = AutoCorrect::new();
-    correct_service.set_max_edit(2);
-
+    let correct_service = AutoCorrect::new_with_max_edit(2);
     let stream = io::stdin();
     let mut input = String::new();
 
@@ -37,7 +35,13 @@ fn main() {
                 correct_service.candidates_async(check, tx);
 
                 let mut count = 5;
+                let mut set = Vec::new();
+
                 for result in rx {
+                    if set.len() > 0 && set.contains(&result.word) {
+                        continue;
+                    }
+
                     println!("Suggestion: {}; Score: {}; Edit Distance: {}",
                              result.word, result.score, result.edit);
 
@@ -45,6 +49,8 @@ fn main() {
                     if count == 0 {
                         break;
                     }
+
+                    set.push(result.word);
                 }
 
                 if let Ok(t) = now.elapsed() {
