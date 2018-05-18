@@ -21,7 +21,7 @@ use std::sync::{mpsc, Arc};
 use candidate::Candidate;
 use threads_pool::*;
 
-//TODO: define config struct -- 1. memory mode vs. speed mode; 2. one miss vs. two misses
+//TODO: define config struct -- 1. memory mode vs. speed mode;
 //TODO: customizable score function
 
 static DEFAULT_MAX_EDIT: u8 = 1;
@@ -40,15 +40,14 @@ pub struct AutoCorrect {
 
 impl AutoCorrect {
     pub fn new() -> AutoCorrect {
-        AutoCorrect::new_with_locale(SupportedLocale::EnUs, DEFAULT_MAX_EDIT)
+        AutoCorrect::new_with_params(SupportedLocale::EnUs, DEFAULT_MAX_EDIT)
     }
 
     pub fn new_with_max_edit(max_edit: u8) -> AutoCorrect {
-        AutoCorrect::new_with_locale(SupportedLocale::EnUs, max_edit)
+        AutoCorrect::new_with_params(SupportedLocale::EnUs, max_edit)
     }
 
-    // TODO: make this public when more locale dict are added
-    fn new_with_locale(locale: SupportedLocale, max_edit: u8) -> AutoCorrect {
+    fn new_with_params(locale: SupportedLocale, max_edit: u8) -> AutoCorrect {
         let service = AutoCorrect {
             max_edit,
             pool: Arc::new(ThreadPool::new(2)),
