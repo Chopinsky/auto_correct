@@ -10,7 +10,9 @@
 [docsrs]: https://docs.rs/auto_correct
 
 ## What is this
-This library provides auto correction suggestions on English words within 1 edit distance.
+This library provides the service to suggest auto-corrections on words within 1 ~ 3 edit distances, based on configurations.
+
+Currently the project only supports English words corrections, and we plan to expand the service to more languages.
 
 ## How to use
 In your project's `Cargo.toml`, add dependency:
@@ -37,6 +39,29 @@ fn main() {
     for idx in 0..results.len() {
         println!("Suggestion #{}: {}; Score: {}; Edit Distance: {}",
                     idx, results[idx].word, results[idx].score, results[idx].edit);
+    }
+}
+```
+
+Alternatively, if you would want a more responsive approach, you can use the `candidate_async` function to get the corrections:
+```rust
+extern crate auto_correct;
+
+use std::sync::mpsc;
+use auto_correct::prelude::*;
+
+fn main() {
+    // Initialize the service
+    let correct_service = AutoCorrect::new();
+    let (tx, rx) = mpsc::channel();
+
+    // Vector `results` contains an array of the `Candidate` objects, which is sorted by scores
+    correct_service.candidates_async("wodr", tx);
+
+    // Print out the result to the screen when receiving new suggestions.
+    for result in rx {
+        println!("Suggestion: {}; Score: {}; Edit Distance: {}",
+                 result.word, result.score, result.edit);
     }
 }
 ```

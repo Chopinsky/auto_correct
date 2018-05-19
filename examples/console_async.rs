@@ -35,13 +35,7 @@ fn main() {
                 correct_service.candidates_async(check, tx);
 
                 let mut count = 5;
-                let mut set = Vec::new();
-
                 for result in rx {
-                    if set.len() > 0 && set.contains(&result.word) {
-                        continue;
-                    }
-
                     println!("Suggestion: {}; Score: {}; Edit Distance: {}",
                              result.word, result.score, result.edit);
 
@@ -49,8 +43,6 @@ fn main() {
                     if count == 0 {
                         break;
                     }
-
-                    set.push(result.word);
                 }
 
                 if let Ok(t) = now.elapsed() {

@@ -75,6 +75,7 @@ impl AutoCorrect {
         let max_edit = self.max_edit;
         let pool_arc = Arc::clone(&self.pool);
 
+        let (tx_cache, rx_cache) = mpsc::channel();
         self.pool.execute(move || {
             dynamic_mode::candidate(
                 word,
@@ -82,8 +83,20 @@ impl AutoCorrect {
                 0,
                 max_edit,
                 pool_arc,
-                Some(tx));
+                Some(tx_cache));
         });
+
+        let mut cache = Vec::new();
+        for result in rx_cache {
+            if !cache.contains(&result.word) {
+                cache.push(result.word.clone());
+
+                // send the result back, if the channel is closed, just return.
+                if let Err(_) = tx.send(result) {
+                    break;
+                }
+            }
+        }
     }
 
     #[inline]
