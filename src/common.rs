@@ -10,7 +10,7 @@ use std::sync::mpsc;
 use super::SupportedLocale;
 use candidate::Candidate;
 
-pub static DELIM: &'static str = "^";
+pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 

@@ -58,7 +58,7 @@ fn main() {
     // Vector `results` contains an array of the `Candidate` objects, which is sorted by scores
     correct_service.candidates_async("wodr", tx);
 
-    // Print out the result to the screen when receiving new suggestions.
+    // Print out the result to the screen when receiving new suggestions. Note that the received results are not ranked.
     for result in rx {
         println!("Suggestion: {}; Score: {}; Edit Distance: {}",
                  result.word, result.score, result.edit);
