@@ -29,6 +29,7 @@ impl Clone for Candidate {
 
 impl Ord for Candidate {
     fn cmp(&self, other: &Candidate) -> Ordering {
+        //TODO: use calculations
         if self.edit == other.edit {
             self.score.cmp(&other.score)
         } else {

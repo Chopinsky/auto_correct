@@ -10,7 +10,7 @@ static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
 
 fn main() {
-    let correct_service = AutoCorrect::new_with_max_edit(2);
+    let correct_service = AutoCorrect::new_with_max_edit(1);
     let stream = io::stdin();
     let mut input = String::new();
 

@@ -40,19 +40,21 @@ pub fn candidate(
     }
 
     // if already a correct word, we're done
+    let mut results = Vec::new();
     if let Ok(set) = WORDS_SET.read() {
         if set.contains_key(&word) {
             // TODO: keep searching even if word is a correct word
             let score = set[&word];
-            let candidate = Candidate::new(word, score, current_edit);
+            let candidate = Candidate::new(word.to_owned(), score, current_edit);
 
             if let Some(tx) = tx_async.take() {
                 if let Err(_) = tx.send(candidate.clone()) {
-                    // if we shall continue the search, should reset tx_async to None then.
+                    // if the channel is closed, no need to continue the search, return here
+                    return vec![candidate];
                 }
             }
 
-            return vec![candidate];
+            results.push(candidate);
         }
     }
 
@@ -84,7 +86,13 @@ pub fn candidate(
     });
 
     pool.execute(move || {
-        transpose_n_insert(locale, word, current_edit, tx, tx_next);
+        transpose_n_insert(
+            locale, 
+            word, 
+            current_edit, 
+            tx, 
+            tx_next
+        );
     });
 
     let rx_next =
@@ -93,7 +101,14 @@ pub fn candidate(
             let tx_async_clone = tx_async.clone();
 
             pool.execute(move || {
-                find_next_edit_candidates(locale, current_edit, max_edit, rx_chl, tx_raw, tx_async_clone);
+                find_next_edit_candidates(
+                    locale, 
+                    current_edit, 
+                    max_edit, 
+                    rx_chl, 
+                    tx_raw, 
+                    tx_async_clone
+                );
             });
 
             Some(rx_raw)
@@ -101,7 +116,6 @@ pub fn candidate(
             None
         };
 
-    let mut results = Vec::new();
     for candidate in rx {
         if !update_or_send(&mut results, candidate, &tx_async) {
             // if caller has dropped the channel before getting all results, stop trying to send
@@ -198,8 +212,9 @@ fn populate_words_set(pool: &ThreadPool, locale: SupportedLocale) -> Result<(), 
     if let Ok(mut set) = WORDS_SET.write() {
         let (tx, rx) = mpsc::channel();
 
+        //TODO: use user defined dict size
         pool.execute(move || {
-            open_file_async(locale, "full", tx);
+            open_file_async(locale, "high", tx);
         });
 
         for received in rx {
