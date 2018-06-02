@@ -33,8 +33,8 @@ pub fn send_next_string(word: String, tx: &Option<mpsc::Sender<String>>) {
     }
 }
 
-pub fn open_file_async(locale: SupportedLocale, tx: mpsc::Sender<String>) {
-    let path = get_dict_path(locale);
+pub fn open_file_async(locale: SupportedLocale, dict_path: &str, tx: mpsc::Sender<String>) {
+    let path = get_dict_path(locale, dict_path);
 
     if path.is_empty() {
         return;
@@ -57,13 +57,21 @@ pub fn open_file_async(locale: SupportedLocale, tx: mpsc::Sender<String>) {
     }
 }
 
-pub fn get_dict_path(locale: SupportedLocale) -> String {
+pub fn get_dict_path(locale: SupportedLocale, dict_size: &str) -> String {
     let locale = match locale {
         SupportedLocale::EnUs => "en-us",
         _ => "en-us",
     };
 
-    format!("./resources/{}/words2.txt", locale)
+    //format!("./resources/{}/words2.txt", locale)
+
+    let dict_loc = match dict_size {
+        "high" => "uniq_high",
+        "low" => "uniq_low",
+        _ => "uniq_full",
+    };
+
+    format!("./resources/{}/{}.txt", locale, dict_loc)
 }
 
 pub fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {

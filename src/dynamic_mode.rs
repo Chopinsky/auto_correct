@@ -199,7 +199,7 @@ fn populate_words_set(pool: &ThreadPool, locale: SupportedLocale) -> Result<(), 
         let (tx, rx) = mpsc::channel();
 
         pool.execute(move || {
-            open_file_async(locale, tx);
+            open_file_async(locale, "full", tx);
         });
 
         for received in rx {
@@ -327,8 +327,13 @@ mod tests {
 
     #[test]
     fn init_test() {
-        let pool = ThreadPool::new(2);
-        let _service = initialize(&pool);
+        let service = super::AutoCorrect {
+            max_edit: 1,
+            pool: Arc::new(ThreadPool::new(2)),
+            locale: super::SupportedLocale::EnUs,
+        };
+
+        let _service = initialize(&service);
 
         let size = WORDS_SET.read().unwrap().len();
         assert_eq!(size, 5464);
