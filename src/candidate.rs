@@ -15,6 +15,11 @@ impl Candidate {
     pub fn get_word(&self) -> String {
         self.word.to_owned()
     }
+    
+    #[inline]
+    fn normalize_score(&self) -> f32 {
+        (self.edit as f32).sqrt() * (self.score as f32)
+    }
 }
 
 impl Clone for Candidate {
@@ -33,7 +38,16 @@ impl Ord for Candidate {
         if self.edit == other.edit {
             self.score.cmp(&other.score)
         } else {
-            other.edit.cmp(&self.edit)
+            let mine = self.normalize_score();
+            let theirs = other.normalize_score();
+
+            if theirs > mine {
+                Ordering::Greater
+            } else if theirs < (mine - 0.0001) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
         }
     }
 }
