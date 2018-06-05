@@ -57,21 +57,27 @@ pub fn open_file_async(locale: SupportedLocale, dict_path: &str, tx: mpsc::Sende
     }
 }
 
-pub fn get_dict_path(locale: SupportedLocale, dict_size: &str) -> String {
-    let locale = match locale {
-        SupportedLocale::EnUs => "en-us",
-        _ => "en-us",
-    };
+pub fn get_dict_path(locale: SupportedLocale, dict_path: &str) -> String {
+    if dict_path.is_empty() {
+        let locale = match locale {
+            SupportedLocale::EnUs => "en-us",
+            _ => "en-us",
+        };
+        
+        format!("./resources/{}/freq_50.txt", locale)
+    } else {
+        dict_path.to_owned()
+    }
 
     //format!("./resources/{}/words2.txt", locale)
 
-    let dict_loc = match dict_size {
-        "high" => "uniq_high",
-        "low" => "uniq_low",
-        _ => "uniq_full",
-    };
+    // let dict_loc = match dict_size {
+    //     "high" => "uniq_high",
+    //     "low" => "uniq_low",
+    //     _ => "uniq_full",
+    // };
 
-    format!("./resources/{}/{}.txt", locale, dict_loc)
+    // format!("./resources/{}/{}.txt", locale, dict_loc)
 }
 
 pub fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {

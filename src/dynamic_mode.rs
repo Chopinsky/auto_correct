@@ -214,7 +214,7 @@ fn populate_words_set(pool: &ThreadPool, locale: SupportedLocale) -> Result<(), 
 
         //TODO: use user defined dict size
         pool.execute(move || {
-            open_file_async(locale, "high", tx);
+            open_file_async(locale, "", tx);
         });
 
         for received in rx {
