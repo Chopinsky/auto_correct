@@ -9,6 +9,7 @@ use std::sync::mpsc;
 
 use super::SupportedLocale;
 use candidate::Candidate;
+use config::{Config};
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
@@ -33,8 +34,9 @@ pub fn send_next_string(word: String, tx: &Option<mpsc::Sender<String>>) {
     }
 }
 
-pub fn open_file_async(locale: SupportedLocale, dict_path: &str, tx: mpsc::Sender<String>) {
-    let path = get_dict_path(locale, dict_path);
+//TODO: take &Config instead
+pub fn load_dict_async(config: Config, tx: mpsc::Sender<String>) {
+    let path = config.get_dict_path();
 
     if path.is_empty() {
         return;
@@ -42,6 +44,7 @@ pub fn open_file_async(locale: SupportedLocale, dict_path: &str, tx: mpsc::Sende
 
     let file_loc = PathBuf::from(path);
     if !file_loc.is_file() {
+        eprintln!("Given dictionary path is invalid: {:?}", file_loc);
         return;
     }
 
@@ -55,29 +58,6 @@ pub fn open_file_async(locale: SupportedLocale, dict_path: &str, tx: mpsc::Sende
             }
         }
     }
-}
-
-pub fn get_dict_path(locale: SupportedLocale, dict_path: &str) -> String {
-    if dict_path.is_empty() {
-        let locale = match locale {
-            SupportedLocale::EnUs => "en-us",
-            _ => "en-us",
-        };
-        
-        format!("./resources/{}/freq_50.txt", locale)
-    } else {
-        dict_path.to_owned()
-    }
-
-    //format!("./resources/{}/words2.txt", locale)
-
-    // let dict_loc = match dict_size {
-    //     "high" => "uniq_high",
-    //     "low" => "uniq_low",
-    //     _ => "uniq_full",
-    // };
-
-    // format!("./resources/{}/{}.txt", locale, dict_loc)
 }
 
 pub fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {

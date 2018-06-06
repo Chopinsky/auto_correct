@@ -4,6 +4,7 @@ use std::sync::{mpsc, Arc, Once, RwLock, ONCE_INIT};
 use super::{AutoCorrect, SupportedLocale};
 use candidate::Candidate;
 use common::*;
+use config::{AutoCorrectConfig, Config};
 use threads_pool::*;
 
 lazy_static! {
@@ -15,7 +16,7 @@ static LAUNCH: Once = ONCE_INIT;
 pub fn initialize(service: &AutoCorrect) {
     // if already initialized, calling this function takes no effect
     LAUNCH.call_once(|| {
-        if let Err(e) = populate_words_set(&service.pool, service.locale.clone()) {
+        if let Err(e) = populate_words_set(&service.config, &service.pool) {
             eprintln!("Failed to initialize: {}", e);
             return;
         }
@@ -24,13 +25,15 @@ pub fn initialize(service: &AutoCorrect) {
 
 pub fn candidate(
     word: String,
-    locale: SupportedLocale,
     current_edit: u8,
-    max_edit: u8,
+    config: &Config,
     pool: Arc<ThreadPool>,
     mut tx_async: Option<mpsc::Sender<Candidate>>,
 ) -> Vec<Candidate> {
-    if current_edit >= max_edit {
+    let defined_max_edit = config.get_max_edit();
+    let defined_locale = config.get_locale();
+
+    if current_edit >= defined_max_edit {
         return Vec::new();
     }
 
@@ -43,7 +46,6 @@ pub fn candidate(
     let mut results = Vec::new();
     if let Ok(set) = WORDS_SET.read() {
         if set.contains_key(&word) {
-            // TODO: keep searching even if word is a correct word
             let score = set[&word];
             let candidate = Candidate::new(word.to_owned(), score, current_edit);
 
@@ -60,10 +62,11 @@ pub fn candidate(
 
     // if a misspell, find the correct one within 1 edit distance
     let (tx, rx) = mpsc::channel();
+    let to_sort = current_edit == 0;
     let current_edit = current_edit + 1;
 
     let (tx_next, tx_next_clone, rx_next) =
-        if current_edit < max_edit {
+        if current_edit < defined_max_edit {
             let (tx_raw, rx_raw) = mpsc::channel();
             let tx_raw_clone = mpsc::Sender::clone(&tx_raw);
             (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
@@ -73,7 +76,7 @@ pub fn candidate(
 
     let tx_clone = mpsc::Sender::clone(&tx);
     let word_clone = word.clone();
-    let locale_clone = locale.clone();
+    let locale_clone = config.get_locale().clone();
 
     pool.execute(move || {
         delete_n_replace(
@@ -87,7 +90,7 @@ pub fn candidate(
 
     pool.execute(move || {
         transpose_n_insert(
-            locale, 
+            defined_locale, 
             word, 
             current_edit, 
             tx, 
@@ -99,12 +102,12 @@ pub fn candidate(
         if let Some(rx_chl) = rx_next {
             let (tx_raw, rx_raw) = mpsc::channel();
             let tx_async_clone = tx_async.clone();
+            let config_moved = config.to_owned();
 
             pool.execute(move || {
                 find_next_edit_candidates(
-                    locale, 
                     current_edit, 
-                    max_edit, 
+                    config_moved, 
                     rx_chl, 
                     tx_raw, 
                     tx_async_clone
@@ -145,7 +148,7 @@ pub fn candidate(
         }
     }
 
-    if results.len() > 1 {
+    if to_sort && results.len() > 1 {
         results.sort_by(|a, b| b.cmp(a));
     }
 
@@ -171,9 +174,8 @@ fn update_or_send(
 }
 
 fn find_next_edit_candidates(
-    locale: SupportedLocale,
     current_edit: u8,
-    max_edit: u8,
+    config: Config,
     rx_chl: mpsc::Receiver<String>,
     tx: mpsc::Sender<Vec<Candidate>>,
     tx_async: Option<mpsc::Sender<Candidate>>
@@ -184,7 +186,7 @@ fn find_next_edit_candidates(
     for next in rx_chl {
         let tx_async_clone = tx_async.clone();
         let mut new_candidates =
-            candidate(next, locale, current_edit, max_edit, Arc::clone(&next_pool), tx_async_clone);
+            candidate(next, current_edit, &config, Arc::clone(&next_pool), tx_async_clone);
 
         let space = candidates.capacity() - candidates.len();
         if space < new_candidates.len() {
@@ -208,13 +210,14 @@ fn find_next_edit_candidates(
         .expect("Failed to send the next round of candidates");
 }
 
-fn populate_words_set(pool: &ThreadPool, locale: SupportedLocale) -> Result<(), String> {
+fn populate_words_set(config: &Config, pool: &ThreadPool) -> Result<(), String> {
     if let Ok(mut set) = WORDS_SET.write() {
         let (tx, rx) = mpsc::channel();
+        let config_clone = config.clone();
 
         //TODO: use user defined dict size
         pool.execute(move || {
-            open_file_async(locale, "", tx);
+            load_dict_async(config_clone, tx);
         });
 
         for received in rx {
@@ -343,9 +346,8 @@ mod tests {
     #[test]
     fn init_test() {
         let service = super::AutoCorrect {
-            max_edit: 1,
+            config: Config::new(),
             pool: Arc::new(ThreadPool::new(2)),
-            locale: super::SupportedLocale::EnUs,
         };
 
         let _service = initialize(&service);
