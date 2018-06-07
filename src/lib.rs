@@ -20,14 +20,14 @@ pub mod prelude {
 
 use std::sync::{mpsc, Arc};
 use candidate::Candidate;
-use config::{Config, SupportedLocale};
+use config::{AutoCorrectConfig, Config, SupportedLocale};
 use threads_pool::*;
 
 //TODO: define config struct -- 1. memory mode vs. speed mode;
 //TODO: customizable score function
 
 pub struct AutoCorrect {
-    pub config: Config,
+    config: Config,
     pool: Arc<ThreadPool>,
 }
 
@@ -36,15 +36,13 @@ impl AutoCorrect {
         AutoCorrect::new_with_config(Config::new())
     }
 
-    fn new_with_config(config: Config) -> AutoCorrect {
+    pub fn new_with_config(config: Config) -> AutoCorrect {
         let service = AutoCorrect {
             config,
             pool: Arc::new(ThreadPool::new(2)),
         };
 
-        //TODO: if speed mode, also load the variation1 (and variation 2 if allowing 2 misses)
-        dynamic_mode::initialize(&service);
-
+        service.refresh_dict();
         service
     }
 
@@ -84,8 +82,57 @@ impl AutoCorrect {
         }
     }
 
+    fn refresh_dict(&self) {
+        //TODO: if speed mode, also load the variation1 (and variation 2 if allowing 2 misses)
+        dynamic_mode::initialize(&self);
+    }
+}
+
+impl AutoCorrectConfig for AutoCorrect {
     #[inline]
-    pub fn get_config<'a>(&'a self) -> &'a Config {
-        &self.config
+    fn set_max_edit(&mut self, max_edit: u8) {
+        if max_edit == self.config.get_max_edit() {
+            return;
+        }
+
+        self.config.set_max_edit(max_edit);
+    }
+
+    #[inline]
+    fn get_max_edit(&self) -> u8 {
+        self.config.get_max_edit()
+    }
+
+    #[inline]
+    fn set_locale(&mut self, locale: SupportedLocale) {
+        if locale == self.config.get_locale() {
+            return;
+        }
+
+        self.config.set_locale(locale);
+
+        if !self.config.get_override_dict().is_empty() {
+            self.refresh_dict();
+        }
+    }
+
+    #[inline]
+    fn get_locale(&self) -> SupportedLocale {
+        self.config.get_locale()
+    }
+
+    #[inline]
+    fn set_override_dict(&mut self, dict_path: &str) {
+        if dict_path == self.config.get_dict_path() {
+            return;
+        }
+
+        self.config.set_override_dict(dict_path);
+        self.refresh_dict();
+    }
+
+    #[inline]
+    fn get_override_dict(&self) -> String {
+        self.config.get_override_dict()
     }
 }

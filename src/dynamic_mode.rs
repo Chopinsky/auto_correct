@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{mpsc, Arc, Once, RwLock, ONCE_INIT};
+use std::sync::{mpsc, Arc, RwLock};
 
 use super::{AutoCorrect, SupportedLocale};
 use candidate::Candidate;
@@ -11,16 +11,12 @@ lazy_static! {
     static ref WORDS_SET: RwLock<Box<HashMap<String, u32>>> = RwLock::new(Box::new(HashMap::new()));
 }
 
-static LAUNCH: Once = ONCE_INIT;
-
 pub fn initialize(service: &AutoCorrect) {
     // if already initialized, calling this function takes no effect
-    LAUNCH.call_once(|| {
-        if let Err(e) = populate_words_set(&service.config, &service.pool) {
-            eprintln!("Failed to initialize: {}", e);
-            return;
-        }
-    });
+    if let Err(e) = populate_words_set(&service.config, &service.pool) {
+        eprintln!("Failed to initialize: {}", e);
+        return;
+    }
 }
 
 pub fn candidate(

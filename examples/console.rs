@@ -11,7 +11,7 @@ static LEN: u8 = 1;
 
 fn main() {
     let mut correct_service = AutoCorrect::new();
-    correct_service.config.set_max_edit(2);
+    correct_service.set_max_edit(2);
 
     let stream = io::stdin();
     let mut input = String::new();
