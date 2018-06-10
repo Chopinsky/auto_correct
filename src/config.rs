@@ -42,16 +42,6 @@ impl Config {
         } else {
             self.override_dict.to_owned()
         }
-
-        //format!("./resources/{}/words2.txt", locale)
-
-        // let dict_loc = match dict_size {
-        //     "high" => "uniq_high",
-        //     "low" => "uniq_low",
-        //     _ => "uniq_full",
-        // };
-
-        // format!("./resources/{}/{}.txt", locale, dict_loc)
     }
 }
 
@@ -94,7 +84,6 @@ impl AutoCorrectConfig for Config {
     }
     
     fn set_override_dict(&mut self, dict_path: &str) {
-        //TODO: reload dict if changed
         self.override_dict = dict_path.to_owned();
     }
 

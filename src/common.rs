@@ -34,7 +34,6 @@ pub fn send_next_string(word: String, tx: &Option<mpsc::Sender<String>>) {
     }
 }
 
-//TODO: take &Config instead
 pub fn load_dict_async(config: Config, tx: mpsc::Sender<String>) {
     let path = config.get_dict_path();
 

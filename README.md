@@ -10,7 +10,7 @@
 [docsrs]: https://docs.rs/auto_correct
 
 ## What is this
-This library provides the service to suggest auto-corrections on words within 1 ~ 3 edit distances, based on configurations.
+This library provides the service to suggest auto-corrections on words within 1 ~ 3 edit distances, based on configurations, where 1 edit distance denotes to one of the following operations: Insert, Remove, Replace, or Transpose. Note that the acdemic definition of the edit distance doesn't include the Transpose operation, and usually treate a Replace operation as 2 edit distances, which doesn't reflect the nature of typical typing mistakes human beings tend to make.  
 
 Currently the project only supports English words corrections, and we plan to expand the service to more languages.
 
@@ -29,7 +29,8 @@ extern crate auto_correct;
 use auto_correct::prelude::*;
 
 fn main() {
-    // Initialize the service
+    // Initialize the service. By default we use the EN-US dictionary with frequency pre-defined, and only give suggestions
+    // within 1 edit distance.
     let correct_service = AutoCorrect::new();
 
     // Vector `results` contains an array of the `Candidate` objects, which is sorted by scores
