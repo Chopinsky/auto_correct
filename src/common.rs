@@ -5,11 +5,11 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::Chars;
-use std::sync::mpsc;
 
 use super::SupportedLocale;
 use candidate::Candidate;
 use config::{Config};
+use crossbeam_channel as channel;
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
@@ -19,22 +19,19 @@ pub fn send_one_candidate(
     word: String,
     edit: u8,
     set: &Box<HashMap<String, u32>>,
-    tx: &mpsc::Sender<Candidate>,
+    tx: &channel::Sender<Candidate>,
 ) {
     let score = set[&word];
-    tx.send(Candidate::new(word, score, edit))
-        .expect("Failed to send the candidate to the caller");
+    tx.send(Candidate::new(word, score, edit));
 }
 
-pub fn send_next_string(word: String, tx: &Option<mpsc::Sender<String>>) {
+pub fn send_next_string(word: String, tx: &Option<channel::Sender<String>>) {
     if let Some(tx_next) = tx {
-        tx_next
-            .send(word)
-            .expect("Failed to send the candidate to the caller");
+        tx_next.send(word);
     }
 }
 
-pub fn load_dict_async(config: Config, tx: mpsc::Sender<String>) {
+pub fn load_dict_async(config: Config, tx: channel::Sender<String>) {
     let path = config.get_dict_path();
 
     if path.is_empty() {
@@ -52,9 +49,7 @@ pub fn load_dict_async(config: Config, tx: mpsc::Sender<String>) {
 
     for raw_line in reader.lines() {
         if let Ok(line) = raw_line {
-            if let Err(err) = tx.send(line) {
-                println!("Unable to read the line from the file: {}", err);
-            }
+            tx.send(line);
         }
     }
 }

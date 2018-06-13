@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::{Arc, RwLock};
 
 use super::{AutoCorrect, SupportedLocale};
 use candidate::Candidate;
 use common::*;
 use config::{AutoCorrectConfig, Config};
+use crossbeam_channel as channel;
 use threads_pool::*;
 
 lazy_static! {
@@ -24,7 +25,7 @@ pub fn candidate(
     current_edit: u8,
     config: &Config,
     pool: Arc<ThreadPool>,
-    mut tx_async: Option<mpsc::Sender<Candidate>>,
+    mut tx_async: Option<channel::Sender<Candidate>>,
 ) -> Vec<Candidate> {
     let defined_max_edit = config.get_max_edit();
     let defined_locale = config.get_locale();
@@ -45,11 +46,8 @@ pub fn candidate(
             let score = set[&word];
             let candidate = Candidate::new(word.to_owned(), score, current_edit);
 
-            if let Some(tx) = tx_async.take() {
-                if let Err(_) = tx.send(candidate.clone()) {
-                    // if the channel is closed, no need to continue the search, return here
-                    return vec![candidate];
-                }
+            if let Some(ref tx) = tx_async {
+                tx.send(candidate.clone());
             }
 
             results.push(candidate);
@@ -57,20 +55,20 @@ pub fn candidate(
     }
 
     // if a misspell, find the correct one within 1 edit distance
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = channel::unbounded();
     let to_sort = current_edit == 0;
     let current_edit = current_edit + 1;
 
     let (tx_next, tx_next_clone, rx_next) =
         if current_edit < defined_max_edit {
-            let (tx_raw, rx_raw) = mpsc::channel();
-            let tx_raw_clone = mpsc::Sender::clone(&tx_raw);
+            let (tx_raw, rx_raw) = channel::unbounded();
+            let tx_raw_clone = tx_raw.clone();
             (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
         } else {
             (None, None, None)
         };
 
-    let tx_clone = mpsc::Sender::clone(&tx);
+    let tx_clone = tx.clone();
     let word_clone = word.clone();
     let locale_clone = config.get_locale().clone();
 
@@ -96,14 +94,14 @@ pub fn candidate(
 
     let rx_next =
         if let Some(rx_chl) = rx_next {
-            let (tx_raw, rx_raw) = mpsc::channel();
+            let (tx_raw, rx_raw) = channel::unbounded();
             let tx_async_clone = tx_async.clone();
             let config_moved = config.to_owned();
 
             pool.execute(move || {
                 find_next_edit_candidates(
                     current_edit, 
-                    config_moved, 
+                    &config_moved, 
                     rx_chl, 
                     tx_raw, 
                     tx_async_clone
@@ -154,15 +152,12 @@ pub fn candidate(
 fn update_or_send(
     results: &mut Vec<Candidate>,
     candidate: Candidate,
-    tx: &Option<mpsc::Sender<Candidate>>) -> bool {
-
+    tx: &Option<channel::Sender<Candidate>>) -> bool 
+{
     if !results.contains(&candidate) {
         results.push(candidate.clone());
         if let Some(tx_async) = tx {
-            if let Err(_) = tx_async.send(candidate) {
-                // if error, means caller has closed the channel
-                return false;
-            }
+            tx_async.send(candidate);
         }
     }
 
@@ -171,47 +166,29 @@ fn update_or_send(
 
 fn find_next_edit_candidates(
     current_edit: u8,
-    config: Config,
-    rx_chl: mpsc::Receiver<String>,
-    tx: mpsc::Sender<Vec<Candidate>>,
-    tx_async: Option<mpsc::Sender<Candidate>>
+    config: &Config,
+    rx_chl: channel::Receiver<String>,
+    tx: channel::Sender<Vec<Candidate>>,
+    tx_async: Option<channel::Sender<Candidate>>
 ) {
-    let mut candidates = Vec::new();
     let next_pool = Arc::new(ThreadPool::new(4));
 
     for next in rx_chl {
         let tx_async_clone = tx_async.clone();
-        let mut new_candidates =
-            candidate(next, current_edit, &config, Arc::clone(&next_pool), tx_async_clone);
+        let candidates =
+            candidate(next, current_edit, config, Arc::clone(&next_pool), tx_async_clone);
 
-        let space = candidates.capacity() - candidates.len();
-        if space < new_candidates.len() {
-            candidates.reserve(new_candidates.len());
-        }
-
-        loop {
-            if new_candidates.is_empty() {
-                break;
-            }
-
-            if let Some(next_candidate) = new_candidates.pop() {
-                if !candidates.contains(&next_candidate) {
-                    candidates.push(next_candidate);
-                }
-            }
+        if candidates.len() > 0 {
+            tx.send(candidates);
         }
     }
-
-    tx.send(candidates)
-        .expect("Failed to send the next round of candidates");
 }
 
 fn populate_words_set(config: &Config, pool: &ThreadPool) -> Result<(), String> {
     if let Ok(mut set) = WORDS_SET.write() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = channel::unbounded();
         let config_clone = config.clone();
 
-        //TODO: use user defined dict size
         pool.execute(move || {
             load_dict_async(config_clone, tx);
         });
@@ -244,8 +221,8 @@ fn delete_n_replace(
     locale: SupportedLocale,
     word: String,
     current_edit: u8,
-    tx: mpsc::Sender<Candidate>,
-    tx_two: Option<mpsc::Sender<String>>,
+    tx: channel::Sender<Candidate>,
+    tx_two: Option<channel::Sender<String>>,
 ) {
     if let Ok(set) = WORDS_SET.read() {
         let edit_two = tx_two.is_some();
@@ -292,8 +269,8 @@ fn transpose_n_insert(
     locale: SupportedLocale,
     word: String,
     current_edit: u8,
-    tx: mpsc::Sender<Candidate>,
-    tx_two: Option<mpsc::Sender<String>>,
+    tx: channel::Sender<Candidate>,
+    tx_two: Option<channel::Sender<String>>,
 ) {
     if let Ok(set) = WORDS_SET.read() {
         let edit_two = tx_two.is_some();

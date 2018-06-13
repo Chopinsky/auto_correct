@@ -21,14 +21,11 @@ impl Config {
     }
 
     pub fn new_with_params(max_edit: u8, locale: SupportedLocale, override_dict: &str) -> Config {
-        let mut config = Config {
-            max_edit: 1,
+        Config {
+            max_edit: normalize_max_edit(max_edit),
             locale,
             override_dict: override_dict.to_owned(),
-        };
-
-        config.set_max_edit(max_edit);
-        config
+        }
     }
 
     pub fn get_dict_path(&self) -> String {        
@@ -67,15 +64,7 @@ impl AutoCorrectConfig for Config {
 
     fn set_max_edit(&mut self, max_edit: u8) {
         // max edit only allowed between 1 and 3
-        self.max_edit = if max_edit > MAX_EDIT_THRESHOLD {
-            eprintln!("Only support max edits less or equal to {}.", MAX_EDIT_THRESHOLD);
-            3
-        } else if max_edit < 1 {
-            eprintln!("Only support max edits greater or equal to 1.");
-            1
-        } else {
-            max_edit
-        };
+        self.max_edit = normalize_max_edit(max_edit);
     }
 
     #[inline]
@@ -96,5 +85,17 @@ impl AutoCorrectConfig for Config {
 impl Clone for Config {
     fn clone(&self) -> Self {
         Config::new_with_params(self.max_edit, self.locale, &self.override_dict[..])
+    }
+}
+
+fn normalize_max_edit(max_edit: u8) -> u8 {
+    if max_edit > MAX_EDIT_THRESHOLD {
+        eprintln!("Only support max edits less or equal to {}.", MAX_EDIT_THRESHOLD);
+        3
+    } else if max_edit < 1 {
+        eprintln!("Only support max edits greater or equal to 1.");
+        1
+    } else {
+        max_edit
     }
 }

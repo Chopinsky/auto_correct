@@ -6,6 +6,7 @@
 #[macro_use]
 extern crate lazy_static;
 extern crate threads_pool;
+extern crate crossbeam_channel;
 
 mod candidate;
 mod common;
@@ -21,6 +22,7 @@ pub mod prelude {
 use std::sync::{mpsc, Arc};
 use candidate::Candidate;
 use config::{AutoCorrectConfig, Config, SupportedLocale};
+use crossbeam_channel as channel;
 use threads_pool::*;
 
 //TODO: define config struct -- 1. memory mode vs. speed mode;
@@ -59,7 +61,7 @@ impl AutoCorrect {
         let config_clone = self.config.clone();
         let pool_arc = Arc::clone(&self.pool);
 
-        let (tx_cache, rx_cache) = mpsc::channel();
+        let (tx_cache, rx_cache) = channel::unbounded();
         self.pool.execute(move || {
             dynamic_mode::candidate(
                 word,
