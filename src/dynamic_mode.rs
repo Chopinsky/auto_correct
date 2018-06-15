@@ -12,7 +12,7 @@ lazy_static! {
     static ref WORDS_SET: RwLock<Box<HashMap<String, u32>>> = RwLock::new(Box::new(HashMap::new()));
 }
 
-pub fn initialize(service: &AutoCorrect) {
+pub(crate) fn initialize(service: &AutoCorrect) {
     // if already initialized, calling this function takes no effect
     if let Err(e) = populate_words_set(&service.config, &service.pool) {
         eprintln!("Failed to initialize: {}", e);
@@ -20,7 +20,7 @@ pub fn initialize(service: &AutoCorrect) {
     }
 }
 
-pub fn candidate(
+pub(crate) fn candidate(
     word: String,
     current_edit: u8,
     config: &Config,
@@ -143,7 +143,7 @@ pub fn candidate(
     }
 
     if to_sort && results.len() > 1 {
-        results.sort_by(|a, b| b.cmp(a));
+        results.sort_by(|a, b| b.cmp(&a));
     }
 
     results

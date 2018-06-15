@@ -15,7 +15,7 @@ pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
-pub fn send_one_candidate(
+pub(crate) fn send_one_candidate(
     word: String,
     edit: u8,
     set: &Box<HashMap<String, u32>>,
@@ -25,13 +25,13 @@ pub fn send_one_candidate(
     tx.send(Candidate::new(word, score, edit));
 }
 
-pub fn send_next_string(word: String, tx: &Option<channel::Sender<String>>) {
+pub(crate) fn send_next_string(word: String, tx: &Option<channel::Sender<String>>) {
     if let Some(tx_next) = tx {
         tx_next.send(word);
     }
 }
 
-pub fn load_dict_async(config: Config, tx: channel::Sender<String>) {
+pub(crate) fn load_dict_async(config: Config, tx: channel::Sender<String>) {
     let path = config.get_dict_path();
 
     if path.is_empty() {
@@ -54,7 +54,7 @@ pub fn load_dict_async(config: Config, tx: channel::Sender<String>) {
     }
 }
 
-pub fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {
+pub(crate) fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {
     match locale {
         &SupportedLocale::EnUs => ALPHABET_EN.chars(),
         _ => ALPHABET_EN.chars(),

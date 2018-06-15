@@ -8,7 +8,7 @@ pub struct Candidate {
 }
 
 impl Candidate {
-    pub fn new(word: String, score: u32, edit: u8) -> Self {
+    pub(crate) fn new(word: String, score: u32, edit: u8) -> Self {
         Candidate { word, score, edit }
     }
 
