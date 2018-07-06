@@ -59,14 +59,13 @@ pub(crate) fn candidate(
     let to_sort = current_edit == 0;
     let current_edit = current_edit + 1;
 
-    let (tx_next, tx_next_clone, rx_next) =
-        if current_edit < defined_max_edit {
-            let (tx_raw, rx_raw) = channel::unbounded();
-            let tx_raw_clone = tx_raw.clone();
-            (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
-        } else {
-            (None, None, None)
-        };
+    let (tx_next, tx_next_clone, rx_next) = if current_edit < defined_max_edit {
+        let (tx_raw, rx_raw) = channel::unbounded();
+        let tx_raw_clone = tx_raw.clone();
+        (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
+    } else {
+        (None, None, None)
+    };
 
     let tx_clone = tx.clone();
     let word_clone = word.clone();
@@ -83,35 +82,22 @@ pub(crate) fn candidate(
     });
 
     pool.execute(move || {
-        transpose_n_insert(
-            defined_locale, 
-            word, 
-            current_edit, 
-            tx, 
-            tx_next
-        );
+        transpose_n_insert(defined_locale, word, current_edit, tx, tx_next);
     });
 
-    let rx_next =
-        if let Some(rx_chl) = rx_next {
-            let (tx_raw, rx_raw) = channel::unbounded();
-            let tx_async_clone = tx_async.clone();
-            let config_moved = config.to_owned();
+    let rx_next = if let Some(rx_chl) = rx_next {
+        let (tx_raw, rx_raw) = channel::unbounded();
+        let tx_async_clone = tx_async.clone();
+        let config_moved = config.to_owned();
 
-            pool.execute(move || {
-                find_next_edit_candidates(
-                    current_edit, 
-                    &config_moved, 
-                    rx_chl, 
-                    tx_raw, 
-                    tx_async_clone
-                );
-            });
+        pool.execute(move || {
+            find_next_edit_candidates(current_edit, &config_moved, rx_chl, tx_raw, tx_async_clone);
+        });
 
-            Some(rx_raw)
-        } else {
-            None
-        };
+        Some(rx_raw)
+    } else {
+        None
+    };
 
     for candidate in rx {
         if !update_or_send(&mut results, candidate, &tx_async) {
@@ -152,8 +138,8 @@ pub(crate) fn candidate(
 fn update_or_send(
     results: &mut Vec<Candidate>,
     candidate: Candidate,
-    tx: &Option<channel::Sender<Candidate>>) -> bool 
-{
+    tx: &Option<channel::Sender<Candidate>>,
+) -> bool {
     if !results.contains(&candidate) {
         results.push(candidate.clone());
         if let Some(tx_async) = tx {
@@ -169,14 +155,19 @@ fn find_next_edit_candidates(
     config: &Config,
     rx_chl: channel::Receiver<String>,
     tx: channel::Sender<Vec<Candidate>>,
-    tx_async: Option<channel::Sender<Candidate>>
+    tx_async: Option<channel::Sender<Candidate>>,
 ) {
     let next_pool = Arc::new(ThreadPool::new(4));
 
     for next in rx_chl {
         let tx_async_clone = tx_async.clone();
-        let candidates =
-            candidate(next, current_edit, config, Arc::clone(&next_pool), tx_async_clone);
+        let candidates = candidate(
+            next,
+            current_edit,
+            config,
+            Arc::clone(&next_pool),
+            tx_async_clone,
+        );
 
         if candidates.len() > 0 {
             tx.send(candidates);

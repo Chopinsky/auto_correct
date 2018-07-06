@@ -8,7 +8,7 @@ use std::str::Chars;
 
 use super::SupportedLocale;
 use candidate::Candidate;
-use config::{Config};
+use config::Config;
 use crossbeam_channel as channel;
 
 pub static DELIM: &'static str = ",";

@@ -28,13 +28,13 @@ impl Config {
         }
     }
 
-    pub fn get_dict_path(&self) -> String {        
+    pub fn get_dict_path(&self) -> String {
         if self.override_dict.is_empty() {
             let locale = match self.locale {
                 SupportedLocale::EnUs => "en-us",
                 _ => "en-us",
             };
-            
+
             format!("./resources/{}/freq_50k.txt", locale)
         } else {
             self.override_dict.to_owned()
@@ -71,7 +71,7 @@ impl AutoCorrectConfig for Config {
     fn get_max_edit(&self) -> u8 {
         self.max_edit
     }
-    
+
     fn set_override_dict(&mut self, dict_path: &str) {
         self.override_dict = dict_path.to_owned();
     }
@@ -90,7 +90,10 @@ impl Clone for Config {
 
 fn normalize_max_edit(max_edit: u8) -> u8 {
     if max_edit > MAX_EDIT_THRESHOLD {
-        eprintln!("Only support max edits less or equal to {}.", MAX_EDIT_THRESHOLD);
+        eprintln!(
+            "Only support max edits less or equal to {}.",
+            MAX_EDIT_THRESHOLD
+        );
         3
     } else if max_edit < 1 {
         eprintln!("Only support max edits greater or equal to 1.");

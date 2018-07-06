@@ -5,8 +5,8 @@
 
 #[macro_use]
 extern crate lazy_static;
-extern crate threads_pool;
 extern crate crossbeam_channel;
+extern crate threads_pool;
 
 mod candidate;
 mod common;
@@ -15,14 +15,14 @@ mod dynamic_mode;
 
 pub mod prelude {
     pub use AutoCorrect;
-    pub use config::{AutoCorrectConfig, Config, SupportedLocale};
     pub use candidate::Candidate;
+    pub use config::{AutoCorrectConfig, Config, SupportedLocale};
 }
 
-use std::sync::{mpsc, Arc};
 use candidate::Candidate;
 use config::{AutoCorrectConfig, Config, SupportedLocale};
 use crossbeam_channel as channel;
+use std::sync::{mpsc, Arc};
 use threads_pool::*;
 
 //TODO: define config struct -- 1. memory mode vs. speed mode;
@@ -49,12 +49,7 @@ impl AutoCorrect {
     }
 
     pub fn candidates(&self, word: String) -> Vec<Candidate> {
-        dynamic_mode::candidate(
-            word,
-            0,
-            &self.config,
-            Arc::clone(&self.pool),
-            None)
+        dynamic_mode::candidate(word, 0, &self.config, Arc::clone(&self.pool), None)
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
@@ -63,12 +58,7 @@ impl AutoCorrect {
 
         let (tx_cache, rx_cache) = channel::unbounded();
         self.pool.execute(move || {
-            dynamic_mode::candidate(
-                word,
-                0,
-                &config_clone,
-                pool_arc,
-                Some(tx_cache));
+            dynamic_mode::candidate(word, 0, &config_clone, pool_arc, Some(tx_cache));
         });
 
         let mut cache = Vec::new();
