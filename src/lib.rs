@@ -12,15 +12,16 @@ mod candidate;
 mod common;
 mod config;
 mod dynamic_mode;
+mod static_mode;
 
 pub mod prelude {
-    pub use AutoCorrect;
     pub use candidate::Candidate;
     pub use config::{AutoCorrectConfig, Config, SupportedLocale};
+    pub use AutoCorrect;
 }
 
 use candidate::Candidate;
-use config::{AutoCorrectConfig, Config, SupportedLocale};
+use config::{AutoCorrectConfig, Config, RunMode, SupportedLocale};
 use crossbeam_channel as channel;
 use std::sync::{mpsc, Arc};
 use threads_pool::*;
@@ -34,6 +35,7 @@ pub struct AutoCorrect {
 }
 
 impl AutoCorrect {
+    #[inline]
     pub fn new() -> AutoCorrect {
         AutoCorrect::new_with_config(Config::new())
     }
@@ -50,6 +52,13 @@ impl AutoCorrect {
 
     pub fn candidates(&self, word: String) -> Vec<Candidate> {
         dynamic_mode::candidate(word, 0, &self.config, Arc::clone(&self.pool), None)
+    }
+
+    fn refresh_dict(&self) {
+        match self.config.get_run_mode() {
+            RunMode::ForSpace => dynamic_mode::initialize(&self),
+            RunMode::ForSpeed => static_mode::initialize(&self),
+        }
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
@@ -72,11 +81,6 @@ impl AutoCorrect {
                 }
             }
         }
-    }
-
-    fn refresh_dict(&self) {
-        //TODO: if speed mode, also load the variation1 (and variation 2 if allowing 2 misses)
-        dynamic_mode::initialize(&self);
     }
 }
 
@@ -111,6 +115,21 @@ impl AutoCorrectConfig for AutoCorrect {
     #[inline]
     fn get_locale(&self) -> SupportedLocale {
         self.config.get_locale()
+    }
+
+    #[inline]
+    fn set_run_mode(&mut self, mode: RunMode) {
+        if self.config.get_run_mode() == mode {
+            return;
+        }
+
+        self.config.set_run_mode(mode);
+        self.refresh_dict();
+    }
+
+    #[inline]
+    fn get_run_mode(&self) -> RunMode {
+        self.config.get_run_mode()
     }
 
     #[inline]
