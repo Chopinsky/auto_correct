@@ -56,8 +56,8 @@ impl AutoCorrect {
 
     fn refresh_dict(&self) {
         match self.config.get_run_mode() {
-            RunMode::ForSpace => dynamic_mode::initialize(&self),
-            RunMode::ForSpeed => static_mode::initialize(&self),
+            RunMode::Space => dynamic_mode::initialize(&self),
+            RunMode::Speed => static_mode::initialize(&self),
         }
     }
 

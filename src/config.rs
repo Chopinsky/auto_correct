@@ -10,8 +10,8 @@ pub enum SupportedLocale {
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum RunMode {
-    ForSpeed,
-    ForSpace,
+    Speed,
+    Space,
 }
 
 pub struct Config {
@@ -24,7 +24,8 @@ pub struct Config {
 impl Config {
     #[inline]
     pub fn new() -> Config {
-        Config::new_with_params(1, SupportedLocale::EnUs, RunMode::ForSpace, "")
+        Config::new_with_params(1, SupportedLocale::EnUs,
+                                RunMode::Space, "")
     }
 
     pub fn new_with_params(
@@ -48,7 +49,11 @@ impl Config {
                 _ => "en-us",
             };
 
-            format!("./resources/{}/freq_50k.txt", locale)
+            match self.run_mode {
+                RunMode::Space => format!("./resources/{}/freq_50k.txt", locale),
+                RunMode::Speed => format!("./resources/{}/freq_50k_proc.txt", locale),
+            }
+
         } else {
             self.override_dict.to_owned()
         }
