@@ -10,8 +10,8 @@ pub enum SupportedLocale {
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum RunMode {
-    Speed,
-    Space,
+    SpeedSensitive,
+    SpaceSensitive,
 }
 
 pub struct Config {
@@ -25,7 +25,7 @@ impl Config {
     #[inline]
     pub fn new() -> Config {
         Config::new_with_params(1, SupportedLocale::EnUs,
-                                RunMode::Space, "")
+                                RunMode::SpeedSensitive, "")
     }
 
     pub fn new_with_params(
@@ -50,8 +50,8 @@ impl Config {
             };
 
             match self.run_mode {
-                RunMode::Space => format!("./resources/{}/freq_50k.txt", locale),
-                RunMode::Speed => format!("./resources/{}/freq_50k_proc.txt", locale),
+                RunMode::SpeedSensitive => format!("./resources/{}/freq_50k_preproc.txt", locale),
+                RunMode::SpaceSensitive => format!("./resources/{}/freq_50k.txt", locale),
             }
 
         } else {

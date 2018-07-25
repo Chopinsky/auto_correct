@@ -2,6 +2,7 @@ import urllib.request
 from pathlib import Path
 
 URL = "http://www.kilgarriff.co.uk/BNClists/lemma.num"
+ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 
 WORD_LIMIT_HIGH = 144000
 WORD_LIMIT_LOW = 72000
@@ -95,12 +96,12 @@ def process_n_save(override=True, path="freq_50k.txt", dest_path="freq_50k_proc.
     if dest_file.is_file() and not override:
         return
 
+    dict = {}
     with open(path, 'r') as f:
         with open(dest_path, 'a') as df:
             print("Info: process begins...")
 
             count = 0
-            dict = {}
             lines = f.readlines()
 
             for line in lines:
@@ -113,12 +114,53 @@ def process_n_save(override=True, path="freq_50k.txt", dest_path="freq_50k_proc.
                 if word_info[0] != "" and word_info[1] != "" and word_info[0] not in dict:
                     dict[word_info[0]] = word_info[1]
 
-            print(count)
-            print(dict)
+            for (word, score) in dict.items():
+                neighbors = words_in_one_edit(word, dict)
+                result = word + "^" + score + "^"
+
+                for neighbor in neighbors:
+                    if len(neighbor) > 0:
+                        result = result + neighbor + ";"
+
+                result = result + "\n"
+                df.write(result)
 
             df.close()
 
         f.close()
+
+    return dict
+
+
+def words_in_one_edit(source, dict):
+    result = set()
+    length = len(source)
+
+    for i in range(length+1):
+        if length > 1:
+            # delete...
+            delete = source[0:i] + source[i+1:]
+            if delete != source and delete in dict and delete not in result:
+                result.add(delete)
+
+            # swap...
+            if i+2 <= length:
+                swap = source[0:i] + source[i+1] + source[i] + source[i+2:]
+                if swap in dict and swap not in result:
+                    result.add(swap)
+
+        for letter in ALPHABET:
+            # insert...
+            insert = source[0:i] + letter + source[i:]
+            if insert in dict and insert not in result:
+                result.add(insert)
+
+            # replace...
+            replace = source[0:i] + letter + source[i+1:]
+            if replace != source and replace in dict and replace not in result:
+                result.add(replace)
+
+    return result
 
 
 if __name__ == '__main__':
@@ -126,5 +168,9 @@ if __name__ == '__main__':
     #process_words(dest_path="words2.txt")
     #process_n_cut(cut_level=0, dest_path="uniq_low.txt")
 
-    process_n_save()
-    print("\nDone!")
+    dict = process_n_save()
+
+    #result = words_in_one_edit("word", dict)
+    #print(result)
+
+    print("\nDone...")
