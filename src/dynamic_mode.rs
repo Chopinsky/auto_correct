@@ -27,10 +27,11 @@ pub(crate) fn candidate(
     pool: Arc<ThreadPool>,
     mut tx_async: Option<channel::Sender<Candidate>>,
 ) -> Vec<Candidate> {
-    let defined_max_edit = config.get_max_edit();
+
+    let max_edit = config.get_max_edit();
     let defined_locale = config.get_locale();
 
-    if current_edit >= defined_max_edit {
+    if current_edit >= max_edit {
         return Vec::new();
     }
 
@@ -59,22 +60,23 @@ pub(crate) fn candidate(
     let to_sort = current_edit == 0;
     let current_edit = current_edit + 1;
 
-    let (tx_next, tx_next_clone, rx_next) = if current_edit < defined_max_edit {
-        let (tx_raw, rx_raw) = channel::unbounded();
-        let tx_raw_clone = tx_raw.clone();
-        (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
-    } else {
-        (None, None, None)
-    };
+    let (tx_next, tx_next_clone, rx_next) =
+        if current_edit < max_edit {
+            let (tx_raw, rx_raw) = channel::unbounded();
+            let tx_raw_clone = tx_raw.clone();
+            (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
+        } else {
+            (None, None, None)
+        };
 
-    let tx_clone = tx.clone();
     let word_clone = word.clone();
     let locale_clone = config.get_locale().clone();
+    let tx_clone = tx.clone();
 
     pool.execute(move || {
         delete_n_replace(
-            locale_clone,
             word_clone,
+            locale_clone,
             current_edit,
             tx_clone,
             tx_next_clone,
@@ -82,7 +84,13 @@ pub(crate) fn candidate(
     });
 
     pool.execute(move || {
-        transpose_n_insert(defined_locale, word, current_edit, tx, tx_next);
+        transpose_n_insert(
+            word,
+            defined_locale,
+            current_edit,
+            tx,
+            tx_next
+        );
     });
 
     let rx_next = if let Some(rx_chl) = rx_next {
@@ -209,8 +217,8 @@ fn populate_words_set(config: &Config, pool: &ThreadPool) -> Result<(), String> 
 }
 
 fn delete_n_replace(
-    locale: SupportedLocale,
     word: String,
+    locale: SupportedLocale,
     current_edit: u8,
     tx: channel::Sender<Candidate>,
     tx_two: Option<channel::Sender<String>>,
@@ -257,8 +265,8 @@ fn delete_n_replace(
 }
 
 fn transpose_n_insert(
-    locale: SupportedLocale,
     word: String,
+    locale: SupportedLocale,
     current_edit: u8,
     tx: channel::Sender<Candidate>,
     tx_two: Option<channel::Sender<String>>,

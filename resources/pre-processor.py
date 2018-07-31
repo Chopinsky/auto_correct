@@ -85,7 +85,7 @@ def process_n_cut(override=True, cut_level=2, path="freq_50k.txt", dest_path="fr
         f.close()
 
 
-def process_n_save(override=True, path="freq_50k.txt", dest_path="freq_50k_proc.txt"):
+def process_n_save(override=True, path="freq_50k.txt", dest_path="freq_50k_precalc.txt"):
     dest_file = Path(dest_path)
     source_file = Path(path)
 
@@ -114,9 +114,10 @@ def process_n_save(override=True, path="freq_50k.txt", dest_path="freq_50k_proc.
                 if word_info[0] != "" and word_info[1] != "" and word_info[0] not in dict:
                     dict[word_info[0]] = word_info[1]
 
+            print(len(dict))
             for (word, score) in dict.items():
                 neighbors = words_in_one_edit(word, dict)
-                result = word + "^" + score + "^"
+                result = word + "^"
 
                 for neighbor in neighbors:
                     if len(neighbor) > 0:
@@ -140,27 +141,28 @@ def words_in_one_edit(source, dict):
         if length > 1:
             # delete...
             delete = source[0:i] + source[i+1:]
-            if delete != source and delete in dict and delete not in result:
-                result.add(delete)
+            check_and_add(delete, source, dict, result)
 
             # swap...
             if i+2 <= length:
                 swap = source[0:i] + source[i+1] + source[i] + source[i+2:]
-                if swap in dict and swap not in result:
-                    result.add(swap)
+                check_and_add(swap, source, dict, result)
 
         for letter in ALPHABET:
             # insert...
             insert = source[0:i] + letter + source[i:]
-            if insert in dict and insert not in result:
-                result.add(insert)
+            check_and_add(insert, source, dict, result)
 
             # replace...
             replace = source[0:i] + letter + source[i+1:]
-            if replace != source and replace in dict and replace not in result:
-                result.add(replace)
+            check_and_add(replace, source, dict, result)
 
     return result
+
+
+def check_and_add(target, source, dict, result):
+    if target != source and target in dict and target not in result:
+        result.add(target)
 
 
 if __name__ == '__main__':

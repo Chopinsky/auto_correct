@@ -12,7 +12,7 @@ mod candidate;
 mod common;
 mod config;
 mod dynamic_mode;
-mod static_mode;
+mod hybrid_mode;
 
 pub mod prelude {
     pub use candidate::Candidate;
@@ -56,7 +56,7 @@ impl AutoCorrect {
 
     fn refresh_dict(&self) {
         match self.config.get_run_mode() {
-            RunMode::SpeedSensitive => static_mode::initialize(&self),
+            RunMode::SpeedSensitive => hybrid_mode::initialize(&self),
             RunMode::SpaceSensitive => dynamic_mode::initialize(&self),
         }
     }
