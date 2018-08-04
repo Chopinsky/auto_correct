@@ -129,16 +129,6 @@ def process_n_save_reverse(override=True, find_all=True, path="./en-us/freq_50k.
                     else:
                         rev_dict[neighbor] = word
 
-                '''
-                result = word + "^"
-                for neighbor in neighbors:
-                    if len(neighbor) > 0:
-                        result = result + neighbor + ";"
-
-                result = result + "\n"
-                df.write(result)
-                '''
-
                 count += 1
                 if count % 500 == 0:
                     ts = time.gmtime()
@@ -254,7 +244,7 @@ if __name__ == '__main__':
     process_n_cut(cut_level=0, dest_path="uniq_low.txt")
     '''
 
-    #dict = process_n_save()
-    process_n_save_reverse()
+    process_n_save()
+    #process_n_save_reverse()
 
     print("\nDone...\n")

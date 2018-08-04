@@ -1,11 +1,5 @@
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-
-use super::{AutoCorrect, SupportedLocale};
-use candidate::Candidate;
-use common::*;
-use config::{AutoCorrectConfig, Config};
-use crossbeam_channel as channel;
+use super::{AutoCorrect};
+use config::{Config};
 use threads_pool::*;
 
 pub(crate) fn initialize(service: &AutoCorrect) {
@@ -16,7 +10,7 @@ pub(crate) fn initialize(service: &AutoCorrect) {
     }
 }
 
-fn populate_words_set(config: &Config, pool: &ThreadPool) -> Result<(), String> {
+fn populate_words_set(_config: &Config, _pool: &ThreadPool) -> Result<(), String> {
     Ok(())
 }
 

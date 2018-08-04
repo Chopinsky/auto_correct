@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use super::{AutoCorrect, SupportedLocale};
+use super::{AutoCorrect};
 use candidate::Candidate;
 use common::*;
 use config::{AutoCorrectConfig, Config};
@@ -70,42 +70,49 @@ pub(crate) fn candidate(
         };
 
     let word_clone = word.clone();
-    let locale_clone = config.get_locale().clone();
+    let locale_clone = defined_locale.clone();
     let tx_clone = tx.clone();
 
     pool.execute(move || {
-        delete_n_replace(
-            word_clone,
-            locale_clone,
-            current_edit,
-            tx_clone,
-            tx_next_clone,
-        );
+        if let Ok(set) = WORDS_SET.read() {
+            delete_n_replace(
+                word_clone,
+                &set,
+                locale_clone,
+                current_edit,
+                tx_clone,
+                tx_next_clone,
+            );
+        }
     });
 
     pool.execute(move || {
-        transpose_n_insert(
-            word,
-            defined_locale,
-            current_edit,
-            tx,
-            tx_next
-        );
+        if let Ok(set) = WORDS_SET.read() {
+            transpose_n_insert(
+                word,
+                &set,
+                defined_locale,
+                current_edit,
+                tx,
+                tx_next
+            );
+        }
     });
 
-    let rx_next = if let Some(rx_chl) = rx_next {
-        let (tx_raw, rx_raw) = channel::unbounded();
-        let tx_async_clone = tx_async.clone();
-        let config_moved = config.to_owned();
+    let rx_next =
+        if let Some(rx_chl) = rx_next {
+            let (tx_raw, rx_raw) = channel::unbounded();
+            let tx_async_clone = tx_async.clone();
+            let config_moved = config.to_owned();
 
-        pool.execute(move || {
-            find_next_edit_candidates(current_edit, &config_moved, rx_chl, tx_raw, tx_async_clone);
-        });
+            pool.execute(move || {
+                find_next_edit_candidates(current_edit, &config_moved, rx_chl, tx_raw, tx_async_clone);
+            });
 
-        Some(rx_raw)
-    } else {
-        None
-    };
+            Some(rx_raw)
+        } else {
+            None
+        };
 
     for candidate in rx {
         if !update_or_send(&mut results, candidate, &tx_async) {
@@ -214,101 +221,6 @@ fn populate_words_set(config: &Config, pool: &ThreadPool) -> Result<(), String> 
     }
 
     Err(String::from("Unable to write to the words set..."))
-}
-
-fn delete_n_replace(
-    word: String,
-    locale: SupportedLocale,
-    current_edit: u8,
-    tx: channel::Sender<Candidate>,
-    tx_two: Option<channel::Sender<String>>,
-) {
-    if let Ok(set) = WORDS_SET.read() {
-        let edit_two = tx_two.is_some();
-
-        let mut base: String;
-        let mut replace: String;
-        let mut removed: char;
-
-        // deletes
-        for pos in 0..word.len() {
-            base = word.clone();
-            removed = base.remove(pos);
-
-            if edit_two && !base.is_empty() {
-                send_next_string(base.clone(), &tx_two);
-            }
-
-            // replaces
-            for chara in get_char_set(&locale) {
-                if chara == removed {
-                    continue;
-                }
-
-                replace = base.clone();
-                replace.insert(pos, chara);
-
-                if edit_two {
-                    send_next_string(replace.clone(), &tx_two);
-                }
-
-                if set.contains_key(&replace) {
-                    send_one_candidate(replace, current_edit, &set, &tx);
-                }
-            }
-
-            if set.contains_key(&base) {
-                send_one_candidate(base, current_edit, &set, &tx);
-            }
-        }
-    }
-}
-
-fn transpose_n_insert(
-    word: String,
-    locale: SupportedLocale,
-    current_edit: u8,
-    tx: channel::Sender<Candidate>,
-    tx_two: Option<channel::Sender<String>>,
-) {
-    if let Ok(set) = WORDS_SET.read() {
-        let edit_two = tx_two.is_some();
-
-        let mut base: String;
-        let mut removed: char;
-
-        // transposes
-        for pos in 1..word.len() {
-            base = word.clone();
-
-            removed = base.remove(pos);
-            base.insert(pos - 1, removed);
-
-            if edit_two && !base.is_empty() {
-                send_next_string(base.clone(), &tx_two);
-            }
-
-            if set.contains_key(&base) {
-                send_one_candidate(base, current_edit, &set, &tx);
-            }
-        }
-
-        // inserts
-        for pos in 0..word.len() + 1 {
-            for chara in get_char_set(&locale) {
-                base = word.clone();
-                base.insert(pos, chara);
-
-                if edit_two {
-                    send_next_string(base.clone(), &tx_two);
-                }
-
-                if set.contains_key(&base) {
-                    send_one_candidate(base, current_edit, &set, &tx);
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]

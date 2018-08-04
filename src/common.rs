@@ -15,6 +15,147 @@ pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
+pub(crate) fn find_all_variations(word: String, locale: SupportedLocale) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    let mut base: String;
+
+    let mut replace: String;
+    let mut removed: char;
+
+    let len = word.len() + 1;
+    for pos in 0..len {
+        if pos < len - 1 {
+            base = word.clone();
+
+            // deletes
+            removed = base.remove(pos);
+            result.push(base.clone());
+
+            // replaces
+            for chara in get_char_set(&locale) {
+                if chara == removed {
+                    continue;
+                }
+
+                replace = base.clone();
+                replace.insert(pos, chara);
+
+                result.push(replace.clone());
+            }
+
+            // transposes
+            if pos > 0 {
+                base.insert(pos - 1, removed);
+                result.push(base.clone());
+            }
+        }
+
+        // inserts
+        for chara in get_char_set(&locale) {
+            base = word.clone();
+            base.insert(pos, chara);
+
+            result.push(base.clone());
+        }
+    }
+
+    result
+}
+
+pub(crate)  fn delete_n_replace(
+    word: String,
+    set: &Box<HashMap<String, u32>>,
+    locale: SupportedLocale,
+    current_edit: u8,
+    tx_curr: channel::Sender<Candidate>,
+    tx_next: Option<channel::Sender<String>>,
+) {
+    let edit_two = tx_next.is_some();
+
+    let mut base: String;
+    let mut replace: String;
+    let mut removed: char;
+
+    // deletes
+    for pos in 0..word.len() {
+        base = word.clone();
+        removed = base.remove(pos);
+
+        if edit_two && !base.is_empty() {
+            send_next_string(base.clone(), &tx_next);
+        }
+
+        // replaces
+        for chara in get_char_set(&locale) {
+            if chara == removed {
+                continue;
+            }
+
+            replace = base.clone();
+            replace.insert(pos, chara);
+
+            if edit_two {
+                send_next_string(replace.clone(), &tx_next);
+            }
+
+            if set.contains_key(&replace) {
+                send_one_candidate(replace, current_edit, set, &tx_curr);
+            }
+        }
+
+        if set.contains_key(&base) {
+            send_one_candidate(base, current_edit, set, &tx_curr);
+        }
+    }
+}
+
+pub(crate) fn transpose_n_insert(
+    word: String,
+    set: &Box<HashMap<String, u32>>,
+    locale: SupportedLocale,
+    current_edit: u8,
+    tx_curr: channel::Sender<Candidate>,
+    tx_next: Option<channel::Sender<String>>,
+) {
+    let edit_two = tx_next.is_some();
+
+    let mut base: String;
+    let mut removed: char;
+
+    // transposes
+    let len = word.len() + 1;
+    for pos in 0..len {
+        if pos > 0 && pos < len - 1 {
+            base = word.clone();
+
+            removed = base.remove(pos);
+            base.insert(pos - 1, removed);
+
+            if edit_two && !base.is_empty() {
+                send_next_string(base.clone(), &tx_next);
+            }
+
+            if set.contains_key(&base) {
+                send_one_candidate(base, current_edit, set, &tx_curr);
+            }
+        }
+
+        // inserts
+        for chara in get_char_set(&locale) {
+            base = word.clone();
+            base.insert(pos, chara);
+
+            if edit_two {
+                send_next_string(base.clone(), &tx_next);
+            }
+
+            if set.contains_key(&base) {
+                send_one_candidate(base, current_edit, set, &tx_curr);
+            }
+        }
+    }
+}
+
 pub(crate) fn send_one_candidate(
     word: String,
     edit: u8,

@@ -53,7 +53,6 @@ impl Config {
                 RunMode::SpeedSensitive => format!("./resources/{}/freq_50k_preproc.txt", locale),
                 RunMode::SpaceSensitive => format!("./resources/{}/freq_50k.txt", locale),
             }
-
         } else {
             self.override_dict.to_owned()
         }

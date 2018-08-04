@@ -5,6 +5,7 @@ authors = ["Jacob Zuo <chopinsky@live.com>"]
 description = "A library to provide auto correct suggestions. Currently supporting EN-US."
 documentation = "https://docs.rs/auto_correct/"
 repository = "https://github.com/Chopinsky/auto_correct.git"
+build = "build.rs"
 readme = "README.md"
 license = "MIT"
 
@@ -12,3 +13,4 @@ license = "MIT"
 lazy_static = "^1.0"
 threads_pool = "^0.1.0"
 crossbeam-channel = "^0.2.0"
+flate2 = "1.0"

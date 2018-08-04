@@ -54,13 +54,6 @@ impl AutoCorrect {
         dynamic_mode::candidate(word, 0, &self.config, Arc::clone(&self.pool), None)
     }
 
-    fn refresh_dict(&self) {
-        match self.config.get_run_mode() {
-            RunMode::SpeedSensitive => hybrid_mode::initialize(&self),
-            RunMode::SpaceSensitive => dynamic_mode::initialize(&self),
-        }
-    }
-
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
         let config_clone = self.config.clone();
         let pool_arc = Arc::clone(&self.pool);
@@ -80,6 +73,13 @@ impl AutoCorrect {
                     break;
                 }
             }
+        }
+    }
+
+    fn refresh_dict(&self) {
+        match self.config.get_run_mode() {
+            RunMode::SpeedSensitive => hybrid_mode::initialize(&self),
+            RunMode::SpaceSensitive => dynamic_mode::initialize(&self),
         }
     }
 }
@@ -145,5 +145,15 @@ impl AutoCorrectConfig for AutoCorrect {
     #[inline]
     fn get_override_dict(&self) -> String {
         self.config.get_override_dict()
+    }
+}
+
+pub trait ServiceUtils {
+    fn refresh_hybrid_dict(custom_path: Option<String>);
+}
+
+impl ServiceUtils for AutoCorrect {
+    fn refresh_hybrid_dict(_custom_path: Option<String>) {
+        //TODO: regenerate the utility dictionary, compress it, and then save it
     }
 }
