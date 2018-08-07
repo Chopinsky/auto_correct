@@ -15,7 +15,7 @@ pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
-pub(crate) fn find_all_variations(word: String, locale: SupportedLocale) -> Vec<String> {
+pub(crate) fn find_variations(word: String, locale: SupportedLocale) -> Vec<String> {
     let mut result: Vec<String> = Vec::new();
     let mut base: String;
 
@@ -32,13 +32,13 @@ pub(crate) fn find_all_variations(word: String, locale: SupportedLocale) -> Vec<
             result.push(base.clone());
 
             // replaces
-            for chara in get_char_set(&locale) {
-                if chara == removed {
+            for rune in get_char_set(&locale) {
+                if rune == removed {
                     continue;
                 }
 
                 replace = base.clone();
-                replace.insert(pos, chara);
+                replace.insert(pos, rune);
 
                 result.push(replace.clone());
             }
@@ -51,9 +51,9 @@ pub(crate) fn find_all_variations(word: String, locale: SupportedLocale) -> Vec<
         }
 
         // inserts
-        for chara in get_char_set(&locale) {
+        for rune in get_char_set(&locale) {
             base = word.clone();
-            base.insert(pos, chara);
+            base.insert(pos, rune);
 
             result.push(base.clone());
         }
@@ -86,13 +86,13 @@ pub(crate)  fn delete_n_replace(
         }
 
         // replaces
-        for chara in get_char_set(&locale) {
-            if chara == removed {
+        for rune in get_char_set(&locale) {
+            if rune == removed {
                 continue;
             }
 
             replace = base.clone();
-            replace.insert(pos, chara);
+            replace.insert(pos, rune);
 
             if edit_two {
                 send_next_string(replace.clone(), &tx_next);
@@ -141,9 +141,9 @@ pub(crate) fn transpose_n_insert(
         }
 
         // inserts
-        for chara in get_char_set(&locale) {
+        for rune in get_char_set(&locale) {
             base = word.clone();
-            base.insert(pos, chara);
+            base.insert(pos, rune);
 
             if edit_two {
                 send_next_string(base.clone(), &tx_next);

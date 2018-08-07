@@ -1,13 +1,40 @@
 #![allow(dead_code)]
 
+extern crate flate2;
+
 use std::env;
 use std::fs::File;
-use std::io::Write;
-use std::path::Path;
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
 
 static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
-fn find_all_variations(word: String) -> Vec<String> {
+fn main() {
+    let skip_rebuild =
+        if let Ok(result) = env::var("SKIP_DICT_REBUILD") {
+            result.to_lowercase()
+        } else {
+            String::new()
+        };
+
+    if skip_rebuild != String::from("true") {
+        let out_dir =
+            if let Ok(result) = env::var("LOCALE") {
+                format!("./resources/{}/", result.to_lowercase())
+            } else {
+                format!("./resources/{}/", String::from("en-us"))
+            };
+
+        let dest_path = Path::new(&out_dir).join("freq_50k_precalc.txt");
+        let mut f = File::create(&dest_path).unwrap();
+
+        refresh_dict(&out_dir, &mut f);
+    }
+}
+
+fn find_variations(word: String) -> Vec<String> {
     let mut result: Vec<String> = Vec::new();
     let mut base: String;
 
@@ -54,29 +81,45 @@ fn find_all_variations(word: String) -> Vec<String> {
     result
 }
 
-fn main() {
-    let skip_rebuild =
-        if let Ok(result) = env::var("SKIP_DICT_REBUILD") {
-            result.to_lowercase()
-        } else {
-            String::new()
-        };
+fn refresh_dict(source_dir: &String, target: &mut File) {
+    let (tx, rx) = mpsc::channel();
+    let source = source_dir.clone();
 
-    if skip_rebuild.len() > 0 && skip_rebuild != String::from("true") {
-        let out_dir =
-            if let Ok(result) = env::var("LOCALE") {
-                format!("./resources/{}/", result.to_lowercase())
+    thread::spawn(move || {
+        let path =
+            if let Ok(override_dict) = env::var("OVERRIDE_DICT") {
+                PathBuf::from(&override_dict)
             } else {
-                format!("./resources/{}/", String::from("en-us"))
+                Path::new(&source).join("freq_50k.txt")
             };
 
-        let dest_path = Path::new(&out_dir).join("freq_50k_precalc.txt");
-        let mut f = File::create(&dest_path).unwrap();
+        if !path.exists() || !path.is_file() {
+            eprintln!("Unable to open the source dictionary from path: {:?}...", path);
+            return;
+        }
 
-        //    f.write_all(b"
-        //        pub fn message() -> &'static str {
-        //            \"Hello, World!\"
-        //        }
-        //    ").unwrap();
+        let file = File::open(path).expect("file not found");
+        let reader = BufReader::new(file);
+
+        for raw_line in reader.lines() {
+            if let Ok(line) = raw_line {
+                tx.send(line).unwrap();
+            }
+        }
+    });
+
+    let mut key: String;
+    let mut result: String;
+
+    for entry in rx {
+        let temp: Vec<&str> = entry.splitn(2, ",").collect();
+        if temp[0].is_empty() {
+            continue;
+        }
+
+        key = temp[0].to_owned();
+        result = format!("{}\n", key);
+
+        target.write(result.as_bytes()).unwrap();
     }
 }

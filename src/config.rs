@@ -25,7 +25,7 @@ impl Config {
     #[inline]
     pub fn new() -> Config {
         Config::new_with_params(1, SupportedLocale::EnUs,
-                                RunMode::SpeedSensitive, "")
+                                RunMode::SpaceSensitive, "")
     }
 
     pub fn new_with_params(
