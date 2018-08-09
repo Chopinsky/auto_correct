@@ -1,6 +1,6 @@
 #![allow(unreachable_patterns)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -8,54 +8,28 @@ use std::str::Chars;
 
 use super::SupportedLocale;
 use candidate::Candidate;
-use config::Config;
 use crossbeam_channel as channel;
+use threads_pool::*;
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
-pub(crate) fn find_variations(word: String, locale: SupportedLocale) -> Vec<String> {
-    let mut result: Vec<String> = Vec::new();
-    let mut base: String;
+pub(crate) fn find_variations(word: String, locale: SupportedLocale, pool: &ThreadPool) -> HashSet<String> {
+    let (tx, rx) = channel::unbounded();
+    let mut result = HashSet::new();
 
-    let mut replace: String;
-    let mut removed: char;
-
-    let len = word.len() + 1;
-    for pos in 0..len {
-        if pos < len - 1 {
-            base = word.clone();
-
-            // deletes
-            removed = base.remove(pos);
-            result.push(base.clone());
-
-            // replaces
-            for rune in get_char_set(&locale) {
-                if rune == removed {
-                    continue;
-                }
-
-                replace = base.clone();
-                replace.insert(pos, rune);
-
-                result.push(replace.clone());
-            }
-
-            // transposes
-            if pos > 0 {
-                base.insert(pos - 1, removed);
-                result.push(base.clone());
-            }
+    pool.execute(move || {
+        let len = word.len() + 1;
+        for pos in 0..len {
+            let source = word.clone();
+            variations_at_pos(source, pos, len, locale, &tx);
         }
+    });
 
-        // inserts
-        for rune in get_char_set(&locale) {
-            base = word.clone();
-            base.insert(pos, rune);
-
-            result.push(base.clone());
+    for variation_set in rx {
+        for variation in variation_set {
+            result.insert(variation);
         }
     }
 
@@ -172,15 +146,14 @@ pub(crate) fn send_next_string(word: String, tx: &Option<channel::Sender<String>
     }
 }
 
-pub(crate) fn load_dict_async(config: Config, tx: channel::Sender<String>) {
-    let path = config.get_dict_path();
-
-    if path.is_empty() {
+pub(crate) fn load_dict_async(dict_path: String, tx: channel::Sender<String>) {
+    if dict_path.is_empty() {
+        eprintln!("No dictionary path is given");
         return;
     }
 
-    let file_loc = PathBuf::from(path);
-    if !file_loc.is_file() {
+    let file_loc = PathBuf::from(dict_path);
+    if !file_loc.exists() || !file_loc.is_file() {
         eprintln!("Given dictionary path is invalid: {:?}", file_loc);
         return;
     }
@@ -199,5 +172,56 @@ pub(crate) fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {
     match locale {
         &SupportedLocale::EnUs => ALPHABET_EN.chars(),
         _ => ALPHABET_EN.chars(),
+    }
+}
+
+fn variations_at_pos(
+    source: String,
+    pos: usize,
+    len: usize,
+    locale: SupportedLocale,
+    tx: &channel::Sender<HashSet<String>>
+) {
+    if pos >= len {
+        return;
+    }
+
+    let mut result = HashSet::new();
+    let mut word = source;
+
+    // inserts
+    for rune in get_char_set(&locale) {
+        let mut base = word.clone();
+        base.insert(pos, rune);
+
+        result.insert(base);
+    }
+
+    if pos < len - 1 {
+        // deletes
+        let removed = word.remove(pos);
+        result.insert(word.clone());
+
+        // replaces
+        for rune in get_char_set(&locale) {
+            if rune == removed {
+                continue;
+            }
+
+            let mut replace = word.clone();
+            replace.insert(pos, rune);
+
+            result.insert(replace);
+        }
+
+        // transposes
+        if pos > 0 {
+            word.insert(pos - 1, removed);
+            result.insert(word.clone());
+        }
+    }
+
+    if result.len() > 0 {
+        tx.send(result);
     }
 }

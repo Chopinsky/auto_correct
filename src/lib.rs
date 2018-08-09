@@ -23,6 +23,7 @@ pub mod prelude {
 use candidate::Candidate;
 use config::{AutoCorrectConfig, Config, RunMode, SupportedLocale};
 use crossbeam_channel as channel;
+use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
 use threads_pool::*;
 
@@ -46,7 +47,7 @@ impl AutoCorrect {
             pool: Arc::new(ThreadPool::new(2)),
         };
 
-        service.refresh_dict();
+        service.init_dict();
         service
     }
 
@@ -76,7 +77,7 @@ impl AutoCorrect {
         }
     }
 
-    fn refresh_dict(&self) {
+    fn init_dict(&self) {
         match self.config.get_run_mode() {
             RunMode::SpeedSensitive => hybrid_mode::initialize(&self),
             RunMode::SpaceSensitive => dynamic_mode::initialize(&self),
@@ -108,7 +109,7 @@ impl AutoCorrectConfig for AutoCorrect {
         self.config.set_locale(locale);
 
         if !self.config.get_override_dict().is_empty() {
-            self.refresh_dict();
+            self.init_dict();
         }
     }
 
@@ -124,7 +125,7 @@ impl AutoCorrectConfig for AutoCorrect {
         }
 
         self.config.set_run_mode(mode);
-        self.refresh_dict();
+        self.init_dict();
     }
 
     #[inline]
@@ -139,7 +140,11 @@ impl AutoCorrectConfig for AutoCorrect {
         }
 
         self.config.set_override_dict(dict_path);
-        self.refresh_dict();
+        self.init_dict();
+
+        if self.config.get_run_mode() == RunMode::SpeedSensitive {
+            self.refresh_hybrid_dict(None);
+        }
     }
 
     #[inline]
@@ -149,11 +154,26 @@ impl AutoCorrectConfig for AutoCorrect {
 }
 
 pub trait ServiceUtils {
-    fn refresh_hybrid_dict(custom_path: Option<String>);
+    fn refresh_hybrid_dict(&self, custom_path: Option<String>) -> HashMap<String, String>;
 }
 
 impl ServiceUtils for AutoCorrect {
-    fn refresh_hybrid_dict(_custom_path: Option<String>) {
+    fn refresh_hybrid_dict(&self, _custom_path: Option<String>) -> HashMap<String, String> {
+        let mut result = HashMap::new();
+        
         //TODO: regenerate the utility dictionary, compress it, and then save it
+
+        // one worker to read from file
+        let (tx, rx) = channel::unbounded();
+        let dict_path = self.config.get_dict_path();
+
+        self.pool.execute(move || {
+            common::load_dict_async(dict_path, tx);
+        });
+
+        // one worker to write to memory
+
+        // eventually write th result to file, and to memory?
+        result
     }
 }

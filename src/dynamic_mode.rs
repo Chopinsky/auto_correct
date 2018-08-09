@@ -193,10 +193,10 @@ fn find_next_edit_candidates(
 fn populate_words_set(config: &Config, pool: &ThreadPool) -> Result<(), String> {
     if let Ok(mut set) = WORDS_SET.write() {
         let (tx, rx) = channel::unbounded();
-        let config_clone = config.clone();
+        let dict_path = config.get_dict_path();
 
         pool.execute(move || {
-            load_dict_async(config_clone, tx);
+            load_dict_async(dict_path, tx);
         });
 
         for received in rx {
