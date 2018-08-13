@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use super::{AutoCorrect};
 use candidate::Candidate;
-use common::*;
+use common;
 use config::{AutoCorrectConfig, Config};
 use crossbeam_channel as channel;
 use threads_pool::*;
@@ -75,7 +75,7 @@ pub(crate) fn candidate(
 
     pool.execute(move || {
         if let Ok(set) = WORDS_SET.read() {
-            delete_n_replace(
+            common::delete_n_replace(
                 word_clone,
                 &set,
                 locale_clone,
@@ -88,7 +88,7 @@ pub(crate) fn candidate(
 
     pool.execute(move || {
         if let Ok(set) = WORDS_SET.read() {
-            transpose_n_insert(
+            common::transpose_n_insert(
                 word,
                 &set,
                 defined_locale,
@@ -196,11 +196,11 @@ fn populate_words_set(config: &Config, pool: &ThreadPool) -> Result<(), String> 
         let dict_path = config.get_dict_path();
 
         pool.execute(move || {
-            load_dict_async(dict_path, tx);
+            common::load_dict_async(dict_path, tx);
         });
 
         for received in rx {
-            let temp: Vec<&str> = received.splitn(2, DELIM).collect();
+            let temp: Vec<&str> = received.splitn(2, common::DELIM).collect();
             if temp[0].is_empty() {
                 continue;
             }

@@ -1,6 +1,6 @@
 #![allow(unreachable_patterns)]
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -8,6 +8,7 @@ use std::str::Chars;
 
 use super::SupportedLocale;
 use candidate::Candidate;
+use config::{AutoCorrectConfig, Config};
 use crossbeam_channel as channel;
 use threads_pool::*;
 
@@ -15,25 +16,46 @@ pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
-pub(crate) fn find_variations(word: String, locale: SupportedLocale, pool: &ThreadPool) -> HashSet<String> {
+pub(crate) fn generate_reverse_dict(config: &Config, pool: &ThreadPool) -> HashMap<String, Vec<String>> {
+    let mut result: HashMap<String, Vec<String>> = HashMap::new();
+
+    // one worker to read from file
     let (tx, rx) = channel::unbounded();
-    let mut result = HashSet::new();
+    let dict_path = config.get_dict_path();
+    let locale = config.get_locale();
 
     pool.execute(move || {
-        let len = word.len() + 1;
-        for pos in 0..len {
-            let source = word.clone();
-            variations_at_pos(source, pos, len, locale, &tx);
-        }
+        load_dict_async(dict_path, tx);
     });
 
-    for variation_set in rx {
-        for variation in variation_set {
-            result.insert(variation);
+    // one worker to write to memory
+    for word in rx {
+        let chan =
+            find_variations(word.clone(), locale, &pool);
+
+        for variation in chan {
+            update_reverse_dict(word.clone(), variation, &mut result);
         }
     }
 
     result
+}
+
+pub(crate) fn find_variations(
+    word: String,
+    locale: SupportedLocale,
+    pool: &ThreadPool
+) -> channel::Receiver<String> {
+    let (tx, rx) = channel::unbounded();
+
+    pool.execute(move || {
+        let len = word.len() + 1;
+        for pos in 0..len {
+            variations_at_pos(word.clone(), pos, len, locale, &tx);
+        }
+    });
+
+    rx
 }
 
 pub(crate)  fn delete_n_replace(
@@ -176,31 +198,28 @@ pub(crate) fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {
 }
 
 fn variations_at_pos(
-    source: String,
+    mut word: String,
     pos: usize,
     len: usize,
     locale: SupportedLocale,
-    tx: &channel::Sender<HashSet<String>>
+    tx: &channel::Sender<String>
 ) {
     if pos >= len {
         return;
     }
-
-    let mut result = HashSet::new();
-    let mut word = source;
 
     // inserts
     for rune in get_char_set(&locale) {
         let mut base = word.clone();
         base.insert(pos, rune);
 
-        result.insert(base);
+        tx.send(base);
     }
 
     if pos < len - 1 {
         // deletes
         let removed = word.remove(pos);
-        result.insert(word.clone());
+        tx.send(word.clone());
 
         // replaces
         for rune in get_char_set(&locale) {
@@ -211,17 +230,25 @@ fn variations_at_pos(
             let mut replace = word.clone();
             replace.insert(pos, rune);
 
-            result.insert(replace);
+            tx.send(replace);
         }
 
         // transposes
         if pos > 0 {
             word.insert(pos - 1, removed);
-            result.insert(word.clone());
+            tx.send(word.clone());
         }
     }
+}
 
-    if result.len() > 0 {
-        tx.send(result);
+fn update_reverse_dict(word: String, variation: String, dict: &mut HashMap<String, Vec<String>>) {
+    if let Some(vec) = dict.get_mut(&variation) {
+        if !vec.contains(&word) {
+            vec.push(word);
+        }
+
+        return;
     }
+
+    dict.insert(variation, vec![word]);
 }

@@ -23,7 +23,6 @@ pub mod prelude {
 use candidate::Candidate;
 use config::{AutoCorrectConfig, Config, RunMode, SupportedLocale};
 use crossbeam_channel as channel;
-use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
 use threads_pool::*;
 
@@ -44,7 +43,7 @@ impl AutoCorrect {
     pub fn new_with_config(config: Config) -> AutoCorrect {
         let service = AutoCorrect {
             config,
-            pool: Arc::new(ThreadPool::new(2)),
+            pool: Arc::new(ThreadPool::new(4)),
         };
 
         service.init_dict();
@@ -86,7 +85,6 @@ impl AutoCorrect {
 }
 
 impl AutoCorrectConfig for AutoCorrect {
-    #[inline]
     fn set_max_edit(&mut self, max_edit: u8) {
         if max_edit == self.config.get_max_edit() {
             return;
@@ -100,7 +98,6 @@ impl AutoCorrectConfig for AutoCorrect {
         self.config.get_max_edit()
     }
 
-    #[inline]
     fn set_locale(&mut self, locale: SupportedLocale) {
         if locale == self.config.get_locale() {
             return;
@@ -118,7 +115,6 @@ impl AutoCorrectConfig for AutoCorrect {
         self.config.get_locale()
     }
 
-    #[inline]
     fn set_run_mode(&mut self, mode: RunMode) {
         if self.config.get_run_mode() == mode {
             return;
@@ -133,7 +129,6 @@ impl AutoCorrectConfig for AutoCorrect {
         self.config.get_run_mode()
     }
 
-    #[inline]
     fn set_override_dict(&mut self, dict_path: &str) {
         if dict_path == self.config.get_dict_path() {
             return;
@@ -154,26 +149,18 @@ impl AutoCorrectConfig for AutoCorrect {
 }
 
 pub trait ServiceUtils {
-    fn refresh_hybrid_dict(&self, custom_path: Option<String>) -> HashMap<String, String>;
+    fn refresh_hybrid_dict(&self, custom_path: Option<String>);
 }
 
 impl ServiceUtils for AutoCorrect {
-    fn refresh_hybrid_dict(&self, _custom_path: Option<String>) -> HashMap<String, String> {
-        let mut result = HashMap::new();
-        
-        //TODO: regenerate the utility dictionary, compress it, and then save it
+    fn refresh_hybrid_dict(&self, _custom_path: Option<String>) {
+        let dict =
+            common::generate_reverse_dict(&self.config, &self.pool);
 
-        // one worker to read from file
-        let (tx, rx) = channel::unbounded();
-        let dict_path = self.config.get_dict_path();
+        //TODO: now compress and save the result to disk
 
-        self.pool.execute(move || {
-            common::load_dict_async(dict_path, tx);
-        });
-
-        // one worker to write to memory
-
-        // eventually write th result to file, and to memory?
-        result
+        if self.config.get_run_mode() == RunMode::SpeedSensitive {
+            hybrid_mode::set_reverse_dict(dict);
+        }
     }
 }
