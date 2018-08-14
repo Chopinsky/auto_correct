@@ -139,7 +139,9 @@ impl AutoCorrectConfig for AutoCorrect {
         self.init_dict();
 
         if self.config.get_run_mode() == RunMode::SpeedSensitive {
-            self.refresh_hybrid_dict(None);
+            if let Err(e) = self.refresh_hybrid_dict(None) {
+                eprintln!("Encountering error while updating the override dict: {}", e);
+            }
         }
     }
 
@@ -150,11 +152,11 @@ impl AutoCorrectConfig for AutoCorrect {
 }
 
 pub trait ServiceUtils {
-    fn refresh_hybrid_dict(&self, custom_path: Option<String>);
-    fn refresh_dynamic_dict(&self, custom_path: Option<String>);}
+    fn refresh_hybrid_dict(&self, custom_path: Option<String>) -> Result<(), String>;
+}
 
 impl ServiceUtils for AutoCorrect {
-    fn refresh_hybrid_dict(&self, _custom_path: Option<String>) {
+    fn refresh_hybrid_dict(&self, _custom_path: Option<String>) -> Result<(), String> {
         let dict =
             common::generate_reverse_dict(&self.config, &self.pool);
 
@@ -163,9 +165,7 @@ impl ServiceUtils for AutoCorrect {
         if self.config.get_run_mode() == RunMode::SpeedSensitive {
             hybrid_mode::set_reverse_dict(dict);
         }
-    }
 
-    fn refresh_dynamic_dict(&self, _custom_path: Option<String>) {
-
+        Ok(())
     }
 }
