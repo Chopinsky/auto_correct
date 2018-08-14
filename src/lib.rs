@@ -7,6 +7,7 @@
 extern crate lazy_static;
 extern crate crossbeam_channel;
 extern crate threads_pool;
+extern crate fst;
 
 mod candidate;
 mod common;
@@ -150,7 +151,7 @@ impl AutoCorrectConfig for AutoCorrect {
 
 pub trait ServiceUtils {
     fn refresh_hybrid_dict(&self, custom_path: Option<String>);
-}
+    fn refresh_dynamic_dict(&self, custom_path: Option<String>);}
 
 impl ServiceUtils for AutoCorrect {
     fn refresh_hybrid_dict(&self, _custom_path: Option<String>) {
@@ -162,5 +163,9 @@ impl ServiceUtils for AutoCorrect {
         if self.config.get_run_mode() == RunMode::SpeedSensitive {
             hybrid_mode::set_reverse_dict(dict);
         }
+    }
+
+    fn refresh_dynamic_dict(&self, _custom_path: Option<String>) {
+
     }
 }

@@ -13,7 +13,8 @@ license = "MIT"
 lazy_static = "^1.0"
 threads_pool = "^0.1.0"
 crossbeam-channel = "^0.2.0"
-flate2 = "1.0"
+flate2 = "^1.0"
+fst = "^0.3"
 
 [build-dependencies]
 flate2 = "1.0"

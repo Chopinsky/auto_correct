@@ -1,9 +1,9 @@
 extern crate auto_correct;
 
-use std::io;
 use auto_correct::prelude::*;
 use auto_correct::ServiceUtils;
 
 fn main() {
-    ServiceUtils::refresh_hybrid_dict(None);
+    let correct_service = AutoCorrect::new();
+    correct_service.refresh_hybrid_dict(None);
 }

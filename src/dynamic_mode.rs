@@ -8,6 +8,8 @@ use config::{AutoCorrectConfig, Config};
 use crossbeam_channel as channel;
 use threads_pool::*;
 
+//TODO: HashMap -> fst crate for the dict
+
 lazy_static! {
     static ref WORDS_SET: RwLock<Box<HashMap<String, u32>>> = RwLock::new(Box::new(HashMap::new()));
 }
@@ -17,6 +19,14 @@ pub(crate) fn initialize(service: &AutoCorrect) {
     if let Err(e) = populate_words_set(&service.config, &service.pool) {
         eprintln!("Failed to initialize: {}", e);
         return;
+    }
+}
+
+pub(crate) fn enumerate(tx: channel::Sender<(String, u32)>) {
+    if let Ok(set) = WORDS_SET.read() {
+        for (key, value) in set.iter() {
+            tx.send((key.to_owned(), *value));
+        }
     }
 }
 
