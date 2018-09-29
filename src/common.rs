@@ -9,12 +9,12 @@ use std::str::Chars;
 use super::SupportedLocale;
 use candidate::Candidate;
 use config::{AutoCorrectConfig, Config};
+use support::*;
 use crossbeam_channel as channel;
 use threads_pool::*;
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
-static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
 pub(crate) fn generate_reverse_dict(config: &Config, pool: &ThreadPool) -> HashMap<String, Vec<String>> {
     let mut result: HashMap<String, Vec<String>> = HashMap::new();
@@ -192,8 +192,8 @@ pub(crate) fn load_dict_async(dict_path: String, tx: channel::Sender<String>) {
 
 pub(crate) fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {
     match locale {
-        &SupportedLocale::EnUs => ALPHABET_EN.chars(),
-        _ => ALPHABET_EN.chars(),
+        &SupportedLocale::EnUs => en_us::ALPHABET_EN.chars(),
+        _ => en_us::ALPHABET_EN.chars(),
     }
 }
 

@@ -7,13 +7,14 @@
 extern crate lazy_static;
 extern crate crossbeam_channel;
 extern crate threads_pool;
-extern crate fst;
+//extern crate fst;
 
 mod candidate;
 mod common;
 mod config;
 mod dynamic_mode;
 mod hybrid_mode;
+mod support;
 
 pub mod prelude {
     pub use candidate::Candidate;
