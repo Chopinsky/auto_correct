@@ -1,6 +1,6 @@
 [package]
 name = "auto_correct"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Jacob Zuo <chopinsky@live.com>"]
 description = "A library to provide auto correct suggestions. Currently supporting EN-US."
 documentation = "https://docs.rs/auto_correct/"
@@ -11,8 +11,8 @@ license = "MIT"
 
 [dependencies]
 lazy_static = "^1.0"
-threads_pool = "^0.1.0"
-crossbeam-channel = "^0.2.0"
+threads_pool = "^0.1.8"
+crossbeam = "^0.6.0"
 flate2 = "^1.0"
 
 [build-dependencies]
