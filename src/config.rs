@@ -1,7 +1,7 @@
 #![allow(unreachable_patterns)]
 
-static DEFAULT_MAX_EDIT: u8 = 1;
-static MAX_EDIT_THRESHOLD: u8 = 3;
+const DEFAULT_MAX_EDIT: u8 = 1;
+const MAX_EDIT_THRESHOLD: u8 = 3;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum SupportedLocale {

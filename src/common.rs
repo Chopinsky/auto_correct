@@ -1,6 +1,5 @@
 #![allow(unreachable_patterns)]
 
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -11,6 +10,7 @@ use candidate::Candidate;
 use config::{AutoCorrectConfig, Config};
 use support::*;
 use crossbeam_channel as channel;
+use hashbrown::HashMap;
 use threads_pool::*;
 
 pub static DELIM: &'static str = ",";
@@ -60,7 +60,7 @@ pub(crate) fn find_variations(
 
 pub(crate)  fn delete_n_replace(
     word: String,
-    set: &Box<HashMap<String, u32>>,
+    set: &HashMap<String, u32>,
     locale: SupportedLocale,
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
@@ -82,7 +82,7 @@ pub(crate)  fn delete_n_replace(
         }
 
         // replaces
-        for rune in get_char_set(&locale) {
+        for rune in get_char_set(locale) {
             if rune == removed {
                 continue;
             }
@@ -107,7 +107,7 @@ pub(crate)  fn delete_n_replace(
 
 pub(crate) fn transpose_n_insert(
     word: String,
-    set: &Box<HashMap<String, u32>>,
+    set: &HashMap<String, u32>,
     locale: SupportedLocale,
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
@@ -137,7 +137,7 @@ pub(crate) fn transpose_n_insert(
         }
 
         // inserts
-        for rune in get_char_set(&locale) {
+        for rune in get_char_set(locale) {
             base = word.clone();
             base.insert(pos, rune);
 
@@ -155,16 +155,18 @@ pub(crate) fn transpose_n_insert(
 pub(crate) fn send_one_candidate(
     word: String,
     edit: u8,
-    set: &Box<HashMap<String, u32>>,
+    set: &HashMap<String, u32>,
     tx: &channel::Sender<Candidate>,
 ) {
     let score = set[&word];
-    tx.send(Candidate::new(word, score, edit));
+    tx.send(Candidate::new(word, score, edit)).expect("Failed to return a candidate");
 }
 
 pub(crate) fn send_next_string(word: String, tx: &Option<channel::Sender<String>>) {
     if let Some(tx_next) = tx {
-        tx_next.send(word);
+        tx_next.send(word).unwrap_or_else(|err| {
+            eprintln!("Failed to search the string: {:?}", err);
+        });
     }
 }
 
@@ -185,20 +187,20 @@ pub(crate) fn load_dict_async(dict_path: String, tx: channel::Sender<String>) {
 
     for raw_line in reader.lines() {
         if let Ok(line) = raw_line {
-            tx.send(line);
+            tx.send(line).expect("Failed to load the dictionary...");
         }
     }
 }
 
-pub(crate) fn get_char_set(locale: &SupportedLocale) -> Chars<'static> {
+pub(crate) fn get_char_set(locale: SupportedLocale) -> Chars<'static> {
     match locale {
-        &SupportedLocale::EnUs => en_us::ALPHABET_EN.chars(),
+        SupportedLocale::EnUs => en_us::ALPHABET_EN.chars(),
         _ => en_us::ALPHABET_EN.chars(),
     }
 }
 
 fn variations_at_pos(
-    mut word: String,
+    word: String,
     pos: usize,
     len: usize,
     locale: SupportedLocale,
@@ -208,36 +210,33 @@ fn variations_at_pos(
         return;
     }
 
-    // inserts
-    for rune in get_char_set(&locale) {
-        let mut base = word.clone();
-        base.insert(pos, rune);
+    let mut remove_base = word.clone();
+    let mut removed = '\u{0000}';
 
-        tx.send(base);
+    if pos < len - 1 && remove_base.len() > 1 {
+        // deletes
+        removed = remove_base.remove(pos);
+        tx.send(remove_base.clone()).expect("Failed to send the search result...");
     }
 
-    if pos < len - 1 {
-        // deletes
-        let removed = word.remove(pos);
-        tx.send(word.clone());
+    for rune in get_char_set(locale) {
+        // inserts
+        let mut base = word.clone();
+        base.insert(pos, rune);
+        tx.send(base).expect("Failed to send the search result...");
 
-        // replaces
-        for rune in get_char_set(&locale) {
-            if rune == removed {
-                continue;
-            }
-
-            let mut replace = word.clone();
+        // replaces if we've actually removed a char
+        if removed != '\u{0000}' && rune != removed {
+            let mut replace = remove_base.clone();
             replace.insert(pos, rune);
-
-            tx.send(replace);
+            tx.send(replace).expect("Failed to send the search result...");
         }
+    }
 
-        // transposes
-        if pos > 0 {
-            word.insert(pos - 1, removed);
-            tx.send(word.clone());
-        }
+    // transpose: if we've removed
+    if removed != '\u{0000}' && pos > 0 {
+        remove_base.insert(pos - 1, removed);
+        tx.send(remove_base.clone()).expect("Failed to send the search result...");
     }
 }
 

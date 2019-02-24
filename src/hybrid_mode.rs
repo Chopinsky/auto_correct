@@ -1,7 +1,8 @@
 use super::{AutoCorrect};
-use std::collections::HashMap;
 use std::sync::RwLock;
+
 use config::{Config};
+use hashbrown::HashMap;
 use threads_pool::*;
 
 lazy_static! {

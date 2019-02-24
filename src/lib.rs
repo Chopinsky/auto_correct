@@ -7,6 +7,7 @@
 extern crate lazy_static;
 extern crate crossbeam_channel;
 extern crate threads_pool;
+extern crate hashbrown;
 //extern crate fst;
 
 mod candidate;
@@ -71,7 +72,7 @@ impl AutoCorrect {
                 cache.push(result.word.clone());
 
                 // send the result back, if the channel is closed, just return.
-                if let Err(_) = tx.send(result) {
+                if tx.send(result).is_err() {
                     break;
                 }
             }

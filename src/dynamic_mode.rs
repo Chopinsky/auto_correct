@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use super::{AutoCorrect};
@@ -6,12 +5,11 @@ use candidate::Candidate;
 use common;
 use config::{AutoCorrectConfig, Config};
 use crossbeam_channel as channel;
+use hashbrown::HashMap;
 use threads_pool::*;
 
-//TODO: HashMap -> fst crate for the dict
-
 lazy_static! {
-    static ref WORDS_SET: RwLock<Box<HashMap<String, u32>>> = RwLock::new(Box::new(HashMap::new()));
+    static ref WORDS_SET: RwLock<HashMap<String, u32>> = RwLock::new(HashMap::new());
 }
 
 pub(crate) fn initialize(service: &AutoCorrect) {
@@ -25,7 +23,7 @@ pub(crate) fn initialize(service: &AutoCorrect) {
 pub(crate) fn enumerate(tx: channel::Sender<(String, u32)>) {
     if let Ok(set) = WORDS_SET.read() {
         for (key, value) in set.iter() {
-            tx.send((key.to_owned(), *value));
+            tx.send((key.to_owned(), *value)).expect("Failed to send a dictionary word...");;
         }
     }
 }
@@ -58,7 +56,7 @@ pub(crate) fn candidate(
             let candidate = Candidate::new(word.to_owned(), score, current_edit);
 
             if let Some(ref tx) = tx_async {
-                tx.send(candidate.clone());
+                tx.send(candidate.clone()).expect("Failed to send the search result...");;
             }
 
             results.push(candidate);
@@ -167,8 +165,11 @@ fn update_or_send(
 ) -> bool {
     if !results.contains(&candidate) {
         results.push(candidate.clone());
+
         if let Some(tx_async) = tx {
-            tx_async.send(candidate);
+            if tx_async.send(candidate).is_err() {
+                return false;
+            }
         }
     }
 
@@ -195,7 +196,7 @@ fn find_next_edit_candidates(
         );
 
         if candidates.len() > 0 {
-            tx.send(candidates);
+            tx.send(candidates).expect("Failed to send the search result...");;
         }
     }
 }
