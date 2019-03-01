@@ -4,6 +4,7 @@ use std::io;
 use std::ops::Div;
 use std::sync::mpsc;
 use std::time::{SystemTime};
+
 use auto_correct::prelude::*;
 
 static OPT: &'static str = "OPT";

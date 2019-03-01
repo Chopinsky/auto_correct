@@ -7,7 +7,7 @@ use auto_correct::prelude::*;
 
 static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
-static LEN: u8 = 1;
+static LEN: u32 = 1;
 
 fn main() {
     let mut correct_service = AutoCorrect::new();
@@ -33,20 +33,20 @@ fn main() {
                 let now = SystemTime::now();
 
                 // run multiple times to benchmark
-                for _i in 0..LEN {
+                for _ in 0..LEN {
                     let check = input.clone();
                     results = correct_service.candidates(check);
                 }
 
-                if let Ok(t) = now.elapsed() {
-                    println!("Time elapsed: {:?}\n\nResults:", t.div(20));
-                }
+                let e = now.elapsed().unwrap();
 
+                println!("\nResults:\n");
                 for idx in 0..results.len() {
                     println!("Suggestion #{}: {}; Score: {}; Edit Distance: {}",
                              idx, results[idx].word, results[idx].score, results[idx].edit);
                 }
 
+                println!("\nTime elapsed: {:?}", e.div(LEN));
                 println!("\n=========================\n");
                 input.clear();
             },

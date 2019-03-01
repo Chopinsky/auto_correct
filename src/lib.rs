@@ -23,18 +23,22 @@ pub mod prelude {
     pub use AutoCorrect;
 }
 
+use std::sync::mpsc;
 use candidate::Candidate;
 use config::{AutoCorrectConfig, Config, RunMode, SupportedLocale};
+
 use crossbeam_channel as channel;
-use std::sync::{mpsc, Arc};
-use threads_pool::*;
+use hashbrown::HashSet;
+use threads_pool::ThreadPool;
 
 //TODO: define config struct -- 1. memory mode vs. speed mode;
 //TODO: customizable score function
 
+static mut POOL: Option<ThreadPool> = None;
+const POOL_SIZE: usize = 8;
+
 pub struct AutoCorrect {
     config: Config,
-    pool: Arc<ThreadPool>,
 }
 
 impl AutoCorrect {
@@ -46,30 +50,34 @@ impl AutoCorrect {
     pub fn new_with_config(config: Config) -> AutoCorrect {
         let service = AutoCorrect {
             config,
-            pool: Arc::new(ThreadPool::new(4)),
         };
 
+        AutoCorrect::pool_init(POOL_SIZE);
         service.init_dict();
+
         service
     }
 
     pub fn candidates(&self, word: String) -> Vec<Candidate> {
-        dynamic_mode::candidate(word, 0, &self.config, Arc::clone(&self.pool), None)
+        let max_edit = self.config.get_max_edit();
+        let locale = self.config.get_locale();
+
+        dynamic_mode::candidate(word, 0, max_edit, locale, None)
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
-        let config_clone = self.config.clone();
-        let pool_arc = Arc::clone(&self.pool);
-
+        let max_edit = self.config.get_max_edit();
+        let locale = self.config.get_locale();
         let (tx_cache, rx_cache) = channel::unbounded();
-        self.pool.execute(move || {
-            dynamic_mode::candidate(word, 0, &config_clone, pool_arc, Some(tx_cache));
+
+        AutoCorrect::run_job(move || {
+            dynamic_mode::candidate(word, 0, max_edit, locale, Some(tx_cache));
         });
 
-        let mut cache = Vec::new();
+        let mut cache = HashSet::with_capacity(10);
         for result in rx_cache {
             if !cache.contains(&result.word) {
-                cache.push(result.word.clone());
+                cache.insert(result.word.clone());
 
                 // send the result back, if the channel is closed, just return.
                 if tx.send(result).is_err() {
@@ -79,11 +87,33 @@ impl AutoCorrect {
         }
     }
 
+    pub(crate) fn run_job<F: FnOnce() + Send + 'static>(f: F) {
+        if let Some(pool) = unsafe { POOL.as_mut() } {
+            if pool.exec(f, true).is_err() {
+                eprintln!("Failed to execute the search service...");
+            };
+
+            return;
+        }
+
+        eprintln!("Failed to execute the service...");
+    }
+
     fn init_dict(&self) {
         match self.config.get_run_mode() {
             RunMode::SpeedSensitive => hybrid_mode::initialize(&self),
             RunMode::SpaceSensitive => dynamic_mode::initialize(&self),
         }
+    }
+
+    fn pool_init(size: usize) {
+        unsafe { POOL.replace(ThreadPool::new(size)); }
+    }
+}
+
+impl Default for AutoCorrect {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -160,7 +190,7 @@ pub trait ServiceUtils {
 impl ServiceUtils for AutoCorrect {
     fn refresh_hybrid_dict(&self, _custom_path: Option<String>) -> Result<(), String> {
         let dict =
-            common::generate_reverse_dict(&self.config, &self.pool);
+            common::generate_reverse_dict(&self.config);
 
         //TODO: now compress and save the result to disk
 

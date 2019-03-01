@@ -5,18 +5,19 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::Chars;
 
-use super::SupportedLocale;
-use candidate::Candidate;
-use config::{AutoCorrectConfig, Config};
-use support::*;
+use crate::SupportedLocale;
+use crate::candidate::Candidate;
+use crate::config::{AutoCorrectConfig, Config};
+use crate::support::*;
+use crate::AutoCorrect;
+
 use crossbeam_channel as channel;
 use hashbrown::HashMap;
-use threads_pool::*;
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 
-pub(crate) fn generate_reverse_dict(config: &Config, pool: &ThreadPool) -> HashMap<String, Vec<String>> {
+pub(crate) fn generate_reverse_dict(config: &Config) -> HashMap<String, Vec<String>> {
     let mut result: HashMap<String, Vec<String>> = HashMap::new();
 
     // one worker to read from file
@@ -24,16 +25,13 @@ pub(crate) fn generate_reverse_dict(config: &Config, pool: &ThreadPool) -> HashM
     let dict_path = config.get_dict_path();
     let locale = config.get_locale();
 
-    pool.execute(move || {
+    AutoCorrect::run_job(move || {
         load_dict_async(dict_path, tx);
     });
 
     // one worker to write to memory
     for word in rx {
-        let chan =
-            find_variations(word.clone(), locale, &pool);
-
-        for variation in chan {
+        for variation in find_variations(word.clone(), locale) {
             update_reverse_dict(word.clone(), variation, &mut result);
         }
     }
@@ -44,11 +42,10 @@ pub(crate) fn generate_reverse_dict(config: &Config, pool: &ThreadPool) -> HashM
 pub(crate) fn find_variations(
     word: String,
     locale: SupportedLocale,
-    pool: &ThreadPool
 ) -> channel::Receiver<String> {
     let (tx, rx) = channel::unbounded();
 
-    pool.execute(move || {
+    AutoCorrect::run_job(move || {
         let len = word.len() + 1;
         for pos in 0..len {
             variations_at_pos(word.clone(), pos, len, locale, &tx);
@@ -70,14 +67,17 @@ pub(crate)  fn delete_n_replace(
 
     let mut base: String;
     let mut replace: String;
-    let mut removed: char;
+    let mut removed: char = '\u{0001}';
+    let mut last_removed: char;
 
     // deletes
     for pos in 0..word.len() {
         base = word.clone();
+
+        last_removed = removed;
         removed = base.remove(pos);
 
-        if edit_two && !base.is_empty() {
+        if edit_two && tx_next.is_some() && last_removed != removed {
             send_next_string(base.clone(), &tx_next);
         }
 
@@ -90,17 +90,19 @@ pub(crate)  fn delete_n_replace(
             replace = base.clone();
             replace.insert(pos, rune);
 
-            if edit_two {
+            if edit_two && tx_next.is_some() {
                 send_next_string(replace.clone(), &tx_next);
             }
 
             if set.contains_key(&replace) {
-                send_one_candidate(replace, current_edit, set, &tx_curr);
+                let score = set[&replace];
+                send_candidate(Candidate::new(replace, score, current_edit), &tx_curr);
             }
         }
 
         if set.contains_key(&base) {
-            send_one_candidate(base, current_edit, set, &tx_curr);
+            let score = set[&base];
+            send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
         }
     }
 }
@@ -116,7 +118,8 @@ pub(crate) fn transpose_n_insert(
     let edit_two = tx_next.is_some();
 
     let mut base: String;
-    let mut removed: char;
+    let mut removed: char = '\u{0001}';
+    let mut last_removed: char;
 
     // transposes
     let len = word.len() + 1;
@@ -124,7 +127,13 @@ pub(crate) fn transpose_n_insert(
         if pos > 0 && pos < len - 1 {
             base = word.clone();
 
+            last_removed = removed;
             removed = base.remove(pos);
+
+            if last_removed == removed {
+                continue;
+            }
+
             base.insert(pos - 1, removed);
 
             if edit_two && !base.is_empty() {
@@ -132,7 +141,8 @@ pub(crate) fn transpose_n_insert(
             }
 
             if set.contains_key(&base) {
-                send_one_candidate(base, current_edit, set, &tx_curr);
+                let score = set[&base];
+                send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
             }
         }
 
@@ -146,20 +156,15 @@ pub(crate) fn transpose_n_insert(
             }
 
             if set.contains_key(&base) {
-                send_one_candidate(base, current_edit, set, &tx_curr);
+                let score = set[&base];
+                send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
             }
         }
     }
 }
 
-pub(crate) fn send_one_candidate(
-    word: String,
-    edit: u8,
-    set: &HashMap<String, u32>,
-    tx: &channel::Sender<Candidate>,
-) {
-    let score = set[&word];
-    tx.send(Candidate::new(word, score, edit)).expect("Failed to return a candidate");
+pub(crate) fn send_candidate(candidate: Candidate, tx: &channel::Sender<Candidate>,) {
+    tx.send(candidate).expect("Failed to return a candidate");
 }
 
 pub(crate) fn send_next_string(word: String, tx: &Option<channel::Sender<String>>) {

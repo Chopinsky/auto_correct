@@ -11,7 +11,7 @@ license = "MIT"
 
 [dependencies]
 lazy_static = "^1.0"
-threads_pool = "^0.1.8"
+threads_pool = "^0.1.16"
 crossbeam-channel = "^0.3.0"
 hashbrown = "0.1"
 flate2 = "^1.0"

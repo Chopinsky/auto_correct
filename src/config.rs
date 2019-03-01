@@ -59,6 +59,12 @@ impl Config {
     }
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub trait AutoCorrectConfig {
     fn set_max_edit(&mut self, max_edit: u8);
     fn get_max_edit(&self) -> u8;

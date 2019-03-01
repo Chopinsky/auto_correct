@@ -1,9 +1,8 @@
-use super::{AutoCorrect};
+use super::AutoCorrect;
 use std::sync::RwLock;
 
 use config::{Config};
 use hashbrown::HashMap;
-use threads_pool::*;
 
 lazy_static! {
     static ref WORDS_SET: RwLock<Box<HashMap<String, u32>>> = RwLock::new(Box::new(HashMap::new()));
@@ -12,7 +11,7 @@ lazy_static! {
 
 pub(crate) fn initialize(service: &AutoCorrect) {
     // if already initialized, calling this function takes no effect
-    if let Err(e) = populate_words_set(&service.config, &service.pool) {
+    if let Err(e) = populate_words_set(&service.config) {
         eprintln!("Failed to initialize: {}", e);
         return;
     }
@@ -24,7 +23,7 @@ pub(crate) fn set_reverse_dict(dict: HashMap<String, Vec<String>>) {
     }
 }
 
-fn populate_words_set(_config: &Config, _pool: &ThreadPool) -> Result<(), String> {
+fn populate_words_set(_config: &Config) -> Result<(), String> {
     Ok(())
 }
 

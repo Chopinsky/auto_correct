@@ -4,3 +4,4 @@
 Cargo.lock
 example.*
 .idea/
+pool.rs
