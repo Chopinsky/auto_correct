@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-extern crate flate2;
-
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
@@ -9,17 +7,14 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 
-static ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
+const ALPHABET_EN: &'static str = "abcdefghijklmnopqrstuvwxyz";
 
 fn main() {
-    let skip_rebuild =
-        if let Ok(result) = env::var("SKIP_DICT_REBUILD") {
-            result.to_lowercase()
-        } else {
-            String::new()
-        };
+    if let Ok(s) = env::var("SKIP_DICT_REBUILD") {
+        if s != String::from("false") {
+            return;
+        }
 
-    if skip_rebuild != String::from("true") {
         let out_dir =
             if let Ok(result) = env::var("LOCALE") {
                 format!("./resources/{}/", result.to_lowercase())
@@ -108,7 +103,6 @@ fn refresh_dict(source_dir: &String, target: &mut File) {
         }
     });
 
-    let mut key: String;
     let mut result: String;
 
     for entry in rx {
@@ -117,8 +111,12 @@ fn refresh_dict(source_dir: &String, target: &mut File) {
             continue;
         }
 
-        key = temp[0].to_owned();
-        result = format!("{}\n", key);
+        result = temp[0].to_owned();
+
+        //TODO: call `find_variations` to get all words within 1 edit distance, then save it to the
+        //      designated location.
+
+        result.push_str("\r\n");
 
         target.write(result.as_bytes()).unwrap();
     }

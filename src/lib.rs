@@ -8,12 +8,13 @@ extern crate lazy_static;
 extern crate crossbeam_channel;
 extern crate threads_pool;
 extern crate hashbrown;
-//extern crate fst;
+extern crate core;
 
 mod candidate;
 mod common;
 mod config;
 mod dynamic_mode;
+mod dynamic;
 mod hybrid_mode;
 mod support;
 
