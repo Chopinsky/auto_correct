@@ -32,19 +32,21 @@ fn main() {
 
                 // run multiple times to benchmark
                 let check = input.clone();
-                let (tx, rx) = mpsc::channel();
-
                 let now = SystemTime::now();
-                correct_service.candidates_async(check, tx);
 
-                let mut count = 5;
-                for result in rx {
-                    println!("Suggestion: {}; Score: {}; Edit Distance: {}",
-                             result.word, result.score, result.edit);
+                {
+                    let (tx, rx) = mpsc::channel();
+                    correct_service.candidates_async(check, tx);
 
-                    count -= 1;
-                    if count == 0 {
-                        break;
+                    let mut count = 5;
+                    for result in rx {
+                        println!("Suggestion: {}; Score: {}; Edit Distance: {}",
+                                 result.word, result.score, result.edit);
+
+                        count -= 1;
+                        if count == 0 {
+                            break;
+                        }
                     }
                 }
 

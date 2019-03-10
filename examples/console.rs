@@ -7,7 +7,7 @@ use auto_correct::prelude::*;
 
 static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
-static LEN: u32 = 1;
+static LEN: u32 = 10;
 
 fn main() {
     let mut correct_service = AutoCorrect::new();

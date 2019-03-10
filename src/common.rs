@@ -4,18 +4,136 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::Chars;
-
-use crate::SupportedLocale;
-use crate::candidate::Candidate;
-use crate::config::{AutoCorrectConfig, Config};
-use crate::support::*;
-use crate::AutoCorrect;
+use std::cmp::Ordering;
 
 use crossbeam_channel as channel;
 use hashbrown::HashMap;
+use crate::SupportedLocale;
+use crate::candidate::Candidate;
+use crate::config::{AutoCorrectConfig, Config};
+use crate::AutoCorrect;
+use crate::support::en_us;
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
+
+pub(crate) fn ins_repl(
+    word: &str,
+    set: &HashMap<String, u32>,
+    current_edit: u8,
+    tx_curr: channel::Sender<Candidate>,
+    tx_next: Option<channel::Sender<String>>
+) {
+    let size = word.len();
+    if size == 0 {
+        return;
+    }
+
+    let len = en_us::ALPHABET.len();
+    for idx in 0..len {
+        let rune = en_us::ALPHABET[idx];
+        let rune_code = get_char_code(rune, 0);
+
+        for pos in 0..=size {
+            if pos > 0 {
+                let (left, right) = {
+                    if pos < size {
+                        // 0 < pos < size
+                        (&word[0..pos], &word[pos..size])
+                    } else {
+                        // pos == size
+                        (word, "")
+                    }
+                };
+
+                if pos == 1 && rune.cmp(left) == Ordering::Equal {
+                    // insert at pos 0 has already handled this case
+                    continue;
+                }
+
+                if size > 2 && pos == size - 1 && rune.cmp(right) == Ordering::Equal {
+                    // insert at pos (size - 1) has already handled this case
+                    continue;
+                }
+
+                // insert
+                send_one([left, rune, right].join(""),
+                         current_edit, set, &tx_curr, &tx_next);
+
+                // replace
+                if rune_code != get_char_code(word, pos - 1) {
+                    send_one([&left[..pos - 1], rune, right].join(""),
+                             current_edit, set, &tx_curr, &tx_next);
+                }
+            } else {
+                // if pos == 0, just insert
+                send_one([rune, word].join(""),
+                         current_edit, set, &tx_curr, &tx_next);
+            }
+        }
+    }
+}
+
+pub(crate) fn del_tran(
+    word: &str,
+    set: &HashMap<String, u32>,
+    current_edit: u8,
+    tx_curr: channel::Sender<Candidate>,
+    tx_next: Option<channel::Sender<String>>
+) {
+    let size = word.len();
+    if size <= 1 {
+        return;
+    }
+
+    for pos in 1..=size {
+        let (left, del, right) =
+            if pos < size {
+                (&word[..pos - 1], &word[pos - 1..pos], &word[pos..])
+            } else {
+                (&word[..size - 1], &word[size - 1..size], "")
+            };
+
+        if pos < size && del.cmp(&right[..1]) == Ordering::Equal{
+            continue;
+        }
+
+        // delete
+        send_one([left, right].join(""),
+                 current_edit, set, &tx_curr, &tx_next);
+
+        // transpose
+        if pos < size {
+            send_one([left, &right[..1], del, &right[1..]].join(""),
+                     current_edit, set, &tx_curr, &tx_next);
+        }
+    }
+}
+
+fn send_one(
+    target: String,
+    edit: u8,
+    set: &HashMap<String, u32>,
+    tx_curr: &channel::Sender<Candidate>,
+    tx_next: &Option<channel::Sender<String>>
+) {
+    if let Some(next_chan) = tx_next {
+        next_chan
+            .send(target.clone())
+            .unwrap_or_else(|err| {
+                eprintln!("Failed to search the string: {:?}", err);
+            });
+    }
+
+    if set.contains_key(&target) {
+        let score = set[&target];
+        tx_curr
+            .send(Candidate::new(target, score, edit))
+            .unwrap_or_else(|err| {
+                eprintln!("Failed to return a search result (err: {:?})", err);
+            });
+    }
+}
 
 pub(crate) fn generate_reverse_dict(config: &Config) -> HashMap<String, Vec<String>> {
     let mut result: HashMap<String, Vec<String>> = HashMap::new();
@@ -42,7 +160,8 @@ pub(crate) fn generate_reverse_dict(config: &Config) -> HashMap<String, Vec<Stri
 pub(crate) fn find_variations(
     word: String,
     locale: SupportedLocale,
-) -> channel::Receiver<String> {
+) -> channel::Receiver<String>
+{
     let (tx, rx) = channel::unbounded();
 
     AutoCorrect::run_job(move || {
@@ -55,16 +174,15 @@ pub(crate) fn find_variations(
     rx
 }
 
-pub(crate)  fn delete_n_replace(
+pub(crate) fn delete_n_replace(
     word: String,
     set: &HashMap<String, u32>,
     locale: SupportedLocale,
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
     tx_next: Option<channel::Sender<String>>,
-) {
-    let edit_two = tx_next.is_some();
-
+)
+{
     let mut base: String;
     let mut replace: String;
     let mut removed: char = '\u{0001}';
@@ -77,7 +195,7 @@ pub(crate)  fn delete_n_replace(
         last_removed = removed;
         removed = base.remove(pos);
 
-        if edit_two && tx_next.is_some() && last_removed != removed {
+        if tx_next.is_some() && last_removed != removed {
             send_next_string(base.clone(), &tx_next);
         }
 
@@ -90,7 +208,7 @@ pub(crate)  fn delete_n_replace(
             replace = base.clone();
             replace.insert(pos, rune);
 
-            if edit_two && tx_next.is_some() {
+            if tx_next.is_some() {
                 send_next_string(replace.clone(), &tx_next);
             }
 
@@ -114,7 +232,8 @@ pub(crate) fn transpose_n_insert(
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
     tx_next: Option<channel::Sender<String>>,
-) {
+)
+{
     let edit_two = tx_next.is_some();
 
     let mut base: String;
@@ -204,13 +323,21 @@ pub(crate) fn get_char_set(locale: SupportedLocale) -> Chars<'static> {
     }
 }
 
+fn get_char_code(word: &str, pos: usize) -> &u8 {
+    match word.as_bytes().get(pos) {
+        Some(res) => res,
+        None => &0u8,
+    }
+}
+
 fn variations_at_pos(
     word: String,
     pos: usize,
     len: usize,
     locale: SupportedLocale,
     tx: &channel::Sender<String>
-) {
+)
+{
     if pos >= len {
         return;
     }

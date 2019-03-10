@@ -28,7 +28,7 @@ pub(crate) fn candidate(
     current_edit: u8,
     max_edit: u8,
     locale: SupportedLocale,
-    mut tx_async: Option<channel::Sender<Candidate>>,
+    tx_async: &mut Option<channel::Sender<Candidate>>,
 ) -> Vec<Candidate> {
     if current_edit >= max_edit {
         return Vec::new();
@@ -72,24 +72,23 @@ pub(crate) fn candidate(
 
     AutoCorrect::run_job(move || {
         if let Some(set) = dict_ref() {
-            common::delete_n_replace(
-                word_clone,
+            common::ins_repl(
+                &word_clone,
                 set,
-                locale,
                 current_edit,
                 tx_clone,
-                tx_next_clone,
+                tx_next_clone
             );
         }
     });
 
     let rx_next = rx_next.and_then(|chan| {
         let (tx_raw, rx_raw) = channel::unbounded();
-        let tx_async_clone = tx_async.clone();
+        let mut tx_async_clone = tx_async.clone();
 
         AutoCorrect::run_job(move || {
             find_next_edit_candidates(
-                current_edit, max_edit, locale, chan, tx_raw, tx_async_clone
+                current_edit, max_edit, locale, chan, tx_raw, &mut tx_async_clone
             );
         });
 
@@ -98,10 +97,9 @@ pub(crate) fn candidate(
 
     AutoCorrect::run_job(move || {
         if let Some(set) = dict_ref() {
-            common::transpose_n_insert(
-                word,
+            common::del_tran(
+                &word,
                 set,
-                locale,
                 current_edit,
                 tx,
                 tx_next
@@ -112,7 +110,7 @@ pub(crate) fn candidate(
     for candidate in rx {
         if !update_or_send(&mut results, candidate, &tx_async) {
             // if caller has dropped the channel before getting all results, stop trying to send
-            tx_async = None;
+            *tx_async = None;
         }
     }
 
@@ -130,7 +128,7 @@ pub(crate) fn candidate(
             for candidate in received {
                 if !update_or_send(&mut results, candidate, &tx_async) {
                     // if caller has dropped the channel before getting all results, stop trying to send
-                    tx_async = None;
+                    *tx_async = None;
                 }
             }
         }
@@ -167,16 +165,15 @@ fn find_next_edit_candidates(
     locale: SupportedLocale,
     rx_chl: channel::Receiver<String>,
     tx: channel::Sender<Vec<Candidate>>,
-    tx_async: Option<channel::Sender<Candidate>>,
+    tx_async: &mut Option<channel::Sender<Candidate>>,
 ) {
     for next in rx_chl {
-        let tx_async_clone = tx_async.clone();
         let candidates = candidate(
             next,
             current_edit,
             max_edit,
             locale,
-            tx_async_clone,
+            tx_async,
         );
 
         if !candidates.is_empty() {

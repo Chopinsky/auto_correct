@@ -14,7 +14,6 @@ mod candidate;
 mod common;
 mod config;
 mod dynamic_mode;
-mod dynamic;
 mod hybrid_mode;
 mod support;
 
@@ -63,7 +62,7 @@ impl AutoCorrect {
         let max_edit = self.config.get_max_edit();
         let locale = self.config.get_locale();
 
-        dynamic_mode::candidate(word, 0, max_edit, locale, None)
+        dynamic_mode::candidate(word, 0, max_edit, locale, &mut None)
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
@@ -72,7 +71,7 @@ impl AutoCorrect {
         let (tx_cache, rx_cache) = channel::unbounded();
 
         AutoCorrect::run_job(move || {
-            dynamic_mode::candidate(word, 0, max_edit, locale, Some(tx_cache));
+            dynamic_mode::candidate(word, 0, max_edit, locale, &mut Some(tx_cache));
         });
 
         let mut cache = HashSet::with_capacity(10);
