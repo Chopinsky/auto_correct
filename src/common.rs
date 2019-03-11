@@ -174,126 +174,6 @@ pub(crate) fn find_variations(
     rx
 }
 
-pub(crate) fn delete_n_replace(
-    word: String,
-    set: &HashMap<String, u32>,
-    locale: SupportedLocale,
-    current_edit: u8,
-    tx_curr: channel::Sender<Candidate>,
-    tx_next: Option<channel::Sender<String>>,
-)
-{
-    let mut base: String;
-    let mut replace: String;
-    let mut removed: char = '\u{0001}';
-    let mut last_removed: char;
-
-    // deletes
-    for pos in 0..word.len() {
-        base = word.clone();
-
-        last_removed = removed;
-        removed = base.remove(pos);
-
-        if tx_next.is_some() && last_removed != removed {
-            send_next_string(base.clone(), &tx_next);
-        }
-
-        // replaces
-        for rune in get_char_set(locale) {
-            if rune == removed {
-                continue;
-            }
-
-            replace = base.clone();
-            replace.insert(pos, rune);
-
-            if tx_next.is_some() {
-                send_next_string(replace.clone(), &tx_next);
-            }
-
-            if set.contains_key(&replace) {
-                let score = set[&replace];
-                send_candidate(Candidate::new(replace, score, current_edit), &tx_curr);
-            }
-        }
-
-        if set.contains_key(&base) {
-            let score = set[&base];
-            send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
-        }
-    }
-}
-
-pub(crate) fn transpose_n_insert(
-    word: String,
-    set: &HashMap<String, u32>,
-    locale: SupportedLocale,
-    current_edit: u8,
-    tx_curr: channel::Sender<Candidate>,
-    tx_next: Option<channel::Sender<String>>,
-)
-{
-    let edit_two = tx_next.is_some();
-
-    let mut base: String;
-    let mut removed: char = '\u{0001}';
-    let mut last_removed: char;
-
-    // transposes
-    let len = word.len() + 1;
-    for pos in 0..len {
-        if pos > 0 && pos < len - 1 {
-            base = word.clone();
-
-            last_removed = removed;
-            removed = base.remove(pos);
-
-            if last_removed == removed {
-                continue;
-            }
-
-            base.insert(pos - 1, removed);
-
-            if edit_two && !base.is_empty() {
-                send_next_string(base.clone(), &tx_next);
-            }
-
-            if set.contains_key(&base) {
-                let score = set[&base];
-                send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
-            }
-        }
-
-        // inserts
-        for rune in get_char_set(locale) {
-            base = word.clone();
-            base.insert(pos, rune);
-
-            if edit_two {
-                send_next_string(base.clone(), &tx_next);
-            }
-
-            if set.contains_key(&base) {
-                let score = set[&base];
-                send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
-            }
-        }
-    }
-}
-
-pub(crate) fn send_candidate(candidate: Candidate, tx: &channel::Sender<Candidate>,) {
-    tx.send(candidate).expect("Failed to return a candidate");
-}
-
-pub(crate) fn send_next_string(word: String, tx: &Option<channel::Sender<String>>) {
-    if let Some(tx_next) = tx {
-        tx_next.send(word).unwrap_or_else(|err| {
-            eprintln!("Failed to search the string: {:?}", err);
-        });
-    }
-}
-
 pub(crate) fn load_dict_async(dict_path: String, tx: channel::Sender<String>) {
     if dict_path.is_empty() {
         eprintln!("No dictionary path is given");
@@ -313,13 +193,6 @@ pub(crate) fn load_dict_async(dict_path: String, tx: channel::Sender<String>) {
         if let Ok(line) = raw_line {
             tx.send(line).expect("Failed to load the dictionary...");
         }
-    }
-}
-
-pub(crate) fn get_char_set(locale: SupportedLocale) -> Chars<'static> {
-    match locale {
-        SupportedLocale::EnUs => en_us::ALPHABET_EN.chars(),
-        _ => en_us::ALPHABET_EN.chars(),
     }
 }
 
@@ -372,6 +245,13 @@ fn variations_at_pos(
     }
 }
 
+fn get_char_set(locale: SupportedLocale) -> Chars<'static> {
+    match locale {
+        SupportedLocale::EnUs => en_us::ALPHABET_EN.chars(),
+        _ => en_us::ALPHABET_EN.chars(),
+    }
+}
+
 fn update_reverse_dict(word: String, variation: String, dict: &mut HashMap<String, Vec<String>>) {
     if let Some(vec) = dict.get_mut(&variation) {
         if !vec.contains(&word) {
@@ -382,4 +262,129 @@ fn update_reverse_dict(word: String, variation: String, dict: &mut HashMap<Strin
     }
 
     dict.insert(variation, vec![word]);
+}
+
+mod deprecated {
+    use crossbeam_channel as channel;
+    use hashbrown::HashMap;
+    use crate::candidate::Candidate;
+    use crate::support::en_us;
+
+    fn delete_n_replace(
+        word: String,
+        set: &HashMap<String, u32>,
+        current_edit: u8,
+        tx_curr: channel::Sender<Candidate>,
+        tx_next: Option<channel::Sender<String>>,
+    )
+    {
+        let mut base: String;
+        let mut replace: String;
+        let mut removed: char = '\u{0001}';
+        let mut last_removed: char;
+
+        // deletes
+        for pos in 0..word.len() {
+            base = word.clone();
+
+            last_removed = removed;
+            removed = base.remove(pos);
+
+            if tx_next.is_some() && last_removed != removed {
+                send_next_string(base.clone(), &tx_next);
+            }
+
+            // replaces
+            for rune in en_us::ALPHABET_EN.chars() {
+                if rune == removed {
+                    continue;
+                }
+
+                replace = base.clone();
+                replace.insert(pos, rune);
+
+                if tx_next.is_some() {
+                    send_next_string(replace.clone(), &tx_next);
+                }
+
+                if set.contains_key(&replace) {
+                    let score = set[&replace];
+                    send_candidate(Candidate::new(replace, score, current_edit), &tx_curr);
+                }
+            }
+
+            if set.contains_key(&base) {
+                let score = set[&base];
+                send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
+            }
+        }
+    }
+
+    fn transpose_n_insert(
+        word: String,
+        set: &HashMap<String, u32>,
+        current_edit: u8,
+        tx_curr: channel::Sender<Candidate>,
+        tx_next: Option<channel::Sender<String>>,
+    )
+    {
+        let edit_two = tx_next.is_some();
+
+        let mut base: String;
+        let mut removed: char = '\u{0001}';
+        let mut last_removed: char;
+
+        // transposes
+        let len = word.len() + 1;
+        for pos in 0..len {
+            if pos > 0 && pos < len - 1 {
+                base = word.clone();
+
+                last_removed = removed;
+                removed = base.remove(pos);
+
+                if last_removed == removed {
+                    continue;
+                }
+
+                base.insert(pos - 1, removed);
+
+                if edit_two && !base.is_empty() {
+                    send_next_string(base.clone(), &tx_next);
+                }
+
+                if set.contains_key(&base) {
+                    let score = set[&base];
+                    send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
+                }
+            }
+
+            // inserts
+            for rune in en_us::ALPHABET_EN.chars() {
+                base = word.clone();
+                base.insert(pos, rune);
+
+                if edit_two {
+                    send_next_string(base.clone(), &tx_next);
+                }
+
+                if set.contains_key(&base) {
+                    let score = set[&base];
+                    send_candidate(Candidate::new(base, score, current_edit), &tx_curr);
+                }
+            }
+        }
+    }
+
+    fn send_candidate(candidate: Candidate, tx: &channel::Sender<Candidate>,) {
+        tx.send(candidate).expect("Failed to return a candidate");
+    }
+
+    fn send_next_string(word: String, tx: &Option<channel::Sender<String>>) {
+        if let Some(tx_next) = tx {
+            tx_next.send(word).unwrap_or_else(|err| {
+                eprintln!("Failed to search the string: {:?}", err);
+            });
+        }
+    }
 }
