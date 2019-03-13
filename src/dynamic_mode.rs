@@ -82,7 +82,7 @@ pub(crate) fn candidate(
         }
     });
 
-    let rx_next = rx_next.and_then(|chan| {
+    let mut rx_next = rx_next.and_then(|chan| {
         let (tx_raw, rx_raw) = channel::unbounded();
         let mut tx_async_clone = tx_async.clone();
 
@@ -107,26 +107,26 @@ pub(crate) fn candidate(
         }
     });
 
-    for candidate in rx {
-        if !update_or_send(&mut results, candidate, &tx_async) {
-            // if caller has dropped the channel before getting all results, stop trying to send
-            *tx_async = None;
+    {
+        // move rx into the scope so it can drop afterwards
+        for candidate in rx {
+            if update_or_send(&mut results, candidate, &tx_async) {
+                // if caller has dropped the channel before getting all results, stop trying to send
+                *tx_async = None;
+            }
         }
     }
 
-    if let Some(rx) = rx_next {
-        for mut received in rx {
+    if let Some(chan) = rx_next.take() {
+        for received in chan {
             if received.is_empty() {
                 continue;
             }
 
-            let space = results.capacity() - results.len();
-            if space < received.len() {
-                results.reserve(received.len());
-            }
+            results.reserve(received.len());
 
             for candidate in received {
-                if !update_or_send(&mut results, candidate, &tx_async) {
+                if update_or_send(&mut results, candidate, &tx_async) {
                     // if caller has dropped the channel before getting all results, stop trying to send
                     *tx_async = None;
                 }
@@ -146,17 +146,18 @@ fn update_or_send(
     candidate: Candidate,
     tx: &Option<channel::Sender<Candidate>>,
 ) -> bool {
+    let mut closed = false;
     if !results.contains(&candidate) {
-        results.push(candidate.clone());
-
         if let Some(tx_async) = tx {
-            if tx_async.send(candidate).is_err() {
-                return false;
+            if tx_async.send(candidate.clone()).is_err() {
+                closed = true;
             }
         }
+
+        results.push(candidate);
     }
 
-    true
+    closed
 }
 
 fn find_next_edit_candidates(

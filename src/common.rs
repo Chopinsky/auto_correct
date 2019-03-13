@@ -30,6 +30,7 @@ pub(crate) fn ins_repl(
     }
 
     let len = en_us::ALPHABET.len();
+
     for idx in 0..len {
         let rune = en_us::ALPHABET[idx];
         let rune_code = get_char_code(rune, 0);
@@ -114,7 +115,7 @@ fn send_one(
     target: String,
     edit: u8,
     set: &HashMap<String, u32>,
-    tx_curr: &channel::Sender<Candidate>,
+    store: &channel::Sender<Candidate>,
     tx_next: &Option<channel::Sender<String>>
 ) {
     if let Some(next_chan) = tx_next {
@@ -127,10 +128,10 @@ fn send_one(
 
     if set.contains_key(&target) {
         let score = set[&target];
-        tx_curr
+        store
             .send(Candidate::new(target, score, edit))
             .unwrap_or_else(|err| {
-                eprintln!("Failed to return a search result (err: {:?})", err);
+                eprintln!("Failed to search the string: {:?}", err);
             });
     }
 }
