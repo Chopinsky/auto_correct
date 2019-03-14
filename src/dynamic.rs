@@ -2,6 +2,7 @@ use crate::AutoCorrect;
 use crate::candidate::Candidate;
 use crate::common;
 use crate::config::Config;
+use crate::stores;
 
 use crossbeam_channel as channel;
 use hashbrown::HashMap;
@@ -40,13 +41,13 @@ pub(crate) fn candidate(
     }
 
     // if already a correct word, we're done
-    let mut results = Vec::new();
+    let mut results = Vec::with_capacity(2 * word.len());
     if let Some(set) = dict_ref() {
         if set.contains_key(&word) {
             let candidate = Candidate::new(word.to_owned(), set[&word], current_edit);
 
             if let Some(tx) = tx_async.as_ref() {
-                tx.send(candidate.clone()).expect("Failed to send the search result...");;
+                tx.send(candidate.clone()).expect("Failed to send the search result...");
             }
 
             results.push(candidate);
@@ -169,6 +170,10 @@ fn find_next_edit_candidates(
     tx_async: &mut Option<channel::Sender<Candidate>>,
 ) {
     for next in rx_chl {
+        if stores::contains(&next) {
+            continue;
+        }
+
         let candidates = candidate(
             next,
             current_edit,

@@ -8,13 +8,13 @@ extern crate lazy_static;
 extern crate crossbeam_channel;
 extern crate threads_pool;
 extern crate hashbrown;
-extern crate core;
 
 mod candidate;
 mod common;
 mod config;
-mod dynamic_mode;
-mod hybrid_mode;
+mod dynamic;
+mod hybrid;
+mod stores;
 mod support;
 
 pub mod prelude {
@@ -62,7 +62,11 @@ impl AutoCorrect {
         let max_edit = self.config.get_max_edit();
         let locale = self.config.get_locale();
 
-        dynamic_mode::candidate(word, 0, max_edit, locale, &mut None)
+        stores::get_ready();
+        let result = dynamic::candidate(word, 0, max_edit, locale, &mut None);
+        stores::reset();
+
+        result
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
@@ -70,11 +74,12 @@ impl AutoCorrect {
         let locale = self.config.get_locale();
         let (tx_cache, rx_cache) = channel::unbounded();
 
+        stores::get_ready();
         AutoCorrect::run_job(move || {
-            dynamic_mode::candidate(word, 0, max_edit, locale, &mut Some(tx_cache));
+            dynamic::candidate(word, 0, max_edit, locale, &mut Some(tx_cache));
         });
 
-        let mut cache = HashSet::with_capacity(10);
+        let mut cache = HashSet::with_capacity(16);
         for result in rx_cache {
             if !cache.contains(&result.word) {
                 cache.insert(result.word.clone());
@@ -85,6 +90,8 @@ impl AutoCorrect {
                 }
             }
         }
+
+        stores::reset();
     }
 
     pub(crate) fn run_job<F: FnOnce() + Send + 'static>(f: F) {
@@ -101,8 +108,8 @@ impl AutoCorrect {
 
     fn init_dict(&self) {
         match self.config.get_run_mode() {
-            RunMode::SpeedSensitive => hybrid_mode::initialize(&self),
-            RunMode::SpaceSensitive => dynamic_mode::initialize(&self),
+            RunMode::SpeedSensitive => hybrid::initialize(&self),
+            RunMode::SpaceSensitive => dynamic::initialize(&self),
         }
     }
 
@@ -195,7 +202,7 @@ impl ServiceUtils for AutoCorrect {
         //TODO: now compress and save the result to disk
 
         if self.config.get_run_mode() == RunMode::SpeedSensitive {
-            hybrid_mode::set_reverse_dict(dict);
+            hybrid::set_reverse_dict(dict);
         }
 
         Ok(())

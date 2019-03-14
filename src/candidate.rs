@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-#[derive(Eq, Debug)]
+#[derive(Eq, Debug, Hash)]
 pub struct Candidate {
     pub word: String,
     pub score: u32,
