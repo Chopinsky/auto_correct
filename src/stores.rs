@@ -42,7 +42,7 @@ pub(crate) fn contains(word: &str) -> bool {
         if let Some(store) = STORE.as_mut() {
             if !store.contains(word) {
                 lock(0);
-                contains = store.insert(word.to_owned());
+                contains = !store.insert(word.to_owned());
                 unlock(0);
             }
         }
