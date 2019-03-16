@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 
-#[derive(Eq, Debug, Hash)]
+#[derive(Debug)]
 pub struct Candidate {
     pub word: String,
     pub score: u32,
@@ -47,5 +48,13 @@ impl PartialOrd for Candidate {
 impl PartialEq for Candidate {
     fn eq(&self, other: &Candidate) -> bool {
         self.word == other.word
+    }
+}
+
+impl Eq for Candidate {}
+
+impl Hash for Candidate {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.word.hash(state);
     }
 }

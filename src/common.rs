@@ -8,10 +8,11 @@ use std::cmp::Ordering;
 
 use crossbeam_channel as channel;
 use hashbrown::HashMap;
-use crate::SupportedLocale;
+use crate::AutoCorrect;
 use crate::candidate::Candidate;
 use crate::config::{AutoCorrectConfig, Config};
-use crate::AutoCorrect;
+use crate::stores;
+use crate::SupportedLocale;
 use crate::support::en_us;
 
 pub static DELIM: &'static str = ",";
@@ -119,6 +120,10 @@ fn send_one(
     tx_next: &Option<channel::Sender<String>>
 ) {
     if let Some(next_chan) = tx_next {
+        if stores::contains(&target) {
+            return;
+        }
+
         next_chan
             .send(target.clone())
             .unwrap_or_else(|err| {

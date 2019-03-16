@@ -16,22 +16,14 @@ pub(crate) fn initialize(service: &AutoCorrect) {
     }
 }
 
-pub(crate) fn enumerate(tx: channel::Sender<(String, u32)>) {
-    if let Some(set) = dict_ref() {
-        for (key, value) in set.iter() {
-            tx.send((key.to_owned(), *value)).expect("Failed to send a dictionary word...");
-        }
-    }
-}
-
 pub(crate) fn candidate(
     word: String,
-    current_edit: u8,
+    edit: u8,
     max_edit: u8,
     locale: SupportedLocale,
-    tx_async: &mut Option<channel::Sender<Candidate>>,
+    tx_async: &Option<channel::Sender<Candidate>>,
 ) -> Vec<Candidate> {
-    if current_edit >= max_edit {
+    if edit >= max_edit {
         return Vec::new();
     }
 
@@ -41,27 +33,33 @@ pub(crate) fn candidate(
     }
 
     // if already a correct word, we're done
-    let mut results = Vec::with_capacity(2 * word.len());
+    let mut results = if tx_async.is_none() {
+        Vec::with_capacity(2 * word.len())
+    } else {
+        Vec::new()
+    };
+
     if let Some(set) = dict_ref() {
         if set.contains_key(&word) {
             let candidate = Candidate::new(word.to_owned(), set[&word], current_edit);
 
-            if let Some(tx) = tx_async.as_ref() {
-                tx.send(candidate.clone()).expect("Failed to send the search result...");
+            if let Some(tx) = tx_async {
+                if let Err(_) = tx.send(candidate) {
+                    return Vec::new();
+                }
+            } else {
+                results.push(candidate);
             }
-
-            results.push(candidate);
         }
     }
 
     // if a misspell, find the correct one within 1 edit distance
-    let (tx, rx) = channel::unbounded();
-    let to_sort = current_edit == 0;
-    let current_edit = current_edit + 1;
+    let (tx, rx) = channel::bounded(64);
+    let current_edit = edit + 1;
 
     let (tx_next, tx_next_clone, rx_next) =
         if current_edit < max_edit {
-            let (tx_raw, rx_raw) = channel::unbounded();
+            let (tx_raw, rx_raw) = channel::bounded(256);
             let tx_raw_clone = tx_raw.clone();
             (Some(tx_raw), Some(tx_raw_clone), Some(rx_raw))
         } else {
@@ -84,12 +82,12 @@ pub(crate) fn candidate(
     });
 
     let mut rx_next = rx_next.and_then(|chan| {
-        let (tx_raw, rx_raw) = channel::unbounded();
-        let mut tx_async_clone = tx_async.clone();
+        let (tx_raw, rx_raw) = channel::bounded(16);
+        let tx_async_clone = tx_async.clone();
 
         AutoCorrect::run_job(move || {
             find_next_edit_candidates(
-                current_edit, max_edit, locale, chan, tx_raw, &mut tx_async_clone
+                current_edit, max_edit, locale, chan, tx_raw, &tx_async_clone
             );
         });
 
@@ -108,12 +106,15 @@ pub(crate) fn candidate(
         }
     });
 
-    {
-        // move rx into the scope so it can drop afterwards
-        for candidate in rx {
-            if update_or_send(&mut results, candidate, &tx_async) {
-                // if caller has dropped the channel before getting all results, stop trying to send
-                *tx_async = None;
+    // move rx into the scope so it can drop afterwards
+    for candidate in rx {
+        if !results.contains(&candidate) {
+            if let Some(chan) = tx_async {
+                if chan.send(candidate).is_err() {
+                    return results;
+                }
+            } else {
+                results.push(candidate);
             }
         }
     }
@@ -124,59 +125,38 @@ pub(crate) fn candidate(
                 continue;
             }
 
-            results.reserve(received.len());
+            if tx_async.is_none() {
+                // if using async channel, results have already been sent
+                results.reserve(received.len());
 
-            for candidate in received {
-                if update_or_send(&mut results, candidate, &tx_async) {
-                    // if caller has dropped the channel before getting all results, stop trying to send
-                    *tx_async = None;
+                for candidate in received {
+                    if !results.contains(&candidate) {
+                        results.push(candidate);
+                    }
                 }
             }
         }
     }
 
-    if to_sort && results.len() > 1 {
+    if edit == 0 && results.len() > 1 {
         results.sort_by(|a, b| b.cmp(&a));
     }
 
     results
 }
 
-fn update_or_send(
-    results: &mut Vec<Candidate>,
-    candidate: Candidate,
-    tx: &Option<channel::Sender<Candidate>>,
-) -> bool {
-    let mut closed = false;
-    if !results.contains(&candidate) {
-        if let Some(tx_async) = tx {
-            if tx_async.send(candidate.clone()).is_err() {
-                closed = true;
-            }
-        }
-
-        results.push(candidate);
-    }
-
-    closed
-}
-
 fn find_next_edit_candidates(
-    current_edit: u8,
+    edit: u8,
     max_edit: u8,
     locale: SupportedLocale,
-    rx_chl: channel::Receiver<String>,
+    rx_next: channel::Receiver<String>,
     tx: channel::Sender<Vec<Candidate>>,
-    tx_async: &mut Option<channel::Sender<Candidate>>,
+    tx_async: &Option<channel::Sender<Candidate>>,
 ) {
-    for next in rx_chl {
-        if stores::contains(&next) {
-            continue;
-        }
-
+    for next in rx_next {
         let candidates = candidate(
             next,
-            current_edit,
+            edit,
             max_edit,
             locale,
             tx_async,

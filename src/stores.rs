@@ -46,7 +46,8 @@ pub(crate) fn contains(word: &str) -> bool {
                 unlock(0);
             }
         }
-    };
+    }
+
     contains
 }
 

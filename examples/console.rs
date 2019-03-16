@@ -5,11 +5,10 @@ use std::io;
 use std::ops::Div;
 use std::time::{SystemTime};
 use auto_correct::prelude::*;
-use hashbrown::HashSet;
 
 static OPT: &'static str = "OPT";
 static EXIT: &'static str = "EXIT";
-static LEN: u32 = 20;
+static LEN: u32 = 10;
 
 fn main() {
     let mut correct_service = AutoCorrect::new();
@@ -35,14 +34,14 @@ fn main() {
                 let now = SystemTime::now();
 
                 // run multiple times to benchmark
-                let mut set = HashSet::new();
-                let mut done = false;
+/*                let mut set = HashSet::new();
+                let mut done = false;*/
 
                 for _ in 0..LEN {
                     let check = input.clone();
                     results = correct_service.candidates(check);
 
-                    if !done {
+/*                    if !done {
                         done = true;
                         results.iter().for_each(|candidate| {
                            if !set.contains(&candidate.word) {
@@ -51,7 +50,7 @@ fn main() {
                                eprintln!("Err: found dup: {}", candidate.word);
                            }
                         });
-                    }
+                    }*/
                 }
 
                 let e = now.elapsed().unwrap();
