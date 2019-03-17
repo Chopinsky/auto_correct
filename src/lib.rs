@@ -208,3 +208,29 @@ impl ServiceUtils for AutoCorrect {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests_dyn {
+    use super::*;
+
+    #[test]
+    fn base() {
+        let mut service = AutoCorrect::new();
+        service.set_max_edit(2);
+        assert_eq!(service.candidates(String::from("tets")).len(), 360usize);
+    }
+
+    #[test]
+    fn long() {
+        let mut service = AutoCorrect::new();
+        service.set_max_edit(2);
+        assert_eq!(service.candidates(String::from("wahtabout")).len(), 1usize);
+    }
+
+    #[test]
+    fn none() {
+        let mut service = AutoCorrect::new();
+        service.set_max_edit(2);
+        assert!(service.candidates(String::from("whataboutism")).is_empty());
+    }
+}

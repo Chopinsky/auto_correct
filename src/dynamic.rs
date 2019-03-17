@@ -1,12 +1,11 @@
+use crossbeam_channel as channel;
+use hashbrown::HashMap;
+
 use crate::AutoCorrect;
 use crate::candidate::Candidate;
 use crate::common;
 use crate::config::Config;
-use crate::stores;
-
-use crossbeam_channel as channel;
-use hashbrown::HashMap;
-use config::SupportedLocale;
+use crate::config::SupportedLocale;
 
 static mut DICT: Option<HashMap<String, u32>> = None;
 
@@ -41,7 +40,7 @@ pub(crate) fn candidate(
 
     if let Some(set) = dict_ref() {
         if set.contains_key(&word) {
-            let candidate = Candidate::new(word.to_owned(), set[&word], current_edit);
+            let candidate = Candidate::new(word.to_owned(), set[&word], edit);
 
             if let Some(tx) = tx_async {
                 if let Err(_) = tx.send(candidate) {
@@ -78,6 +77,16 @@ pub(crate) fn candidate(
                 tx_clone,
                 tx_next_clone
             );
+
+/*
+            common::deprecated::delete_n_replace(
+                word_clone,
+                set,
+                current_edit,
+                tx_clone,
+                tx_next_clone
+            )
+*/
         }
     });
 
@@ -103,6 +112,16 @@ pub(crate) fn candidate(
                 tx,
                 tx_next
             );
+
+/*
+            common::deprecated::transpose_n_insert(
+                word,
+                set,
+                current_edit,
+                tx,
+                tx_next
+            );
+*/
         }
     });
 
@@ -195,6 +214,8 @@ fn populate_words_set(config: &Config) -> Result<(), String> {
             }
         }
 
+        set.shrink_to_fit();
+
         return Ok(());
     }
 
@@ -210,27 +231,11 @@ fn dict_ref() -> Option<&'static HashMap<String, u32>> {
 fn dict_mut() -> Option<&'static mut HashMap<String, u32>> {
     unsafe {
         if DICT.is_none() {
-            DICT.replace(HashMap::with_capacity(50_000));
+            DICT.replace(
+                HashMap::with_capacity(50_000)
+            );
         }
 
         DICT.as_mut()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn init_test() {
-        let service = super::AutoCorrect {
-            config: Config::new(),
-            //pool: Arc::new(ThreadPool::new(2)),
-        };
-
-        let _service = initialize(&service);
-
-        let size = WORDS_SET.read().unwrap().len();
-        assert_eq!(size, 5464);
     }
 }

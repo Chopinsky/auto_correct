@@ -120,21 +120,18 @@ fn send_one(
     tx_next: &Option<channel::Sender<String>>
 ) {
     if let Some(next_chan) = tx_next {
-        if stores::contains(&target) {
-            return;
+        if !stores::contains(&target) {
+            next_chan
+                .send(target.clone())
+                .unwrap_or_else(|err| {
+                    eprintln!("Failed to search the string: {:?}", err);
+                });
         }
-
-        next_chan
-            .send(target.clone())
-            .unwrap_or_else(|err| {
-                eprintln!("Failed to search the string: {:?}", err);
-            });
     }
 
-    if set.contains_key(&target) {
-        let score = set[&target];
+    if let Some(score) = set.get(&target) {
         store
-            .send(Candidate::new(target, score, edit))
+            .send(Candidate::new(target, score.to_owned(), edit))
             .unwrap_or_else(|err| {
                 eprintln!("Failed to search the string: {:?}", err);
             });
@@ -270,13 +267,13 @@ fn update_reverse_dict(word: String, variation: String, dict: &mut HashMap<Strin
     dict.insert(variation, vec![word]);
 }
 
-mod deprecated {
+pub(crate) mod deprecated {
     use crossbeam_channel as channel;
     use hashbrown::HashMap;
     use crate::candidate::Candidate;
     use crate::support::en_us;
 
-    fn delete_n_replace(
+    pub(crate) fn delete_n_replace(
         word: String,
         set: &HashMap<String, u32>,
         current_edit: u8,
@@ -326,7 +323,7 @@ mod deprecated {
         }
     }
 
-    fn transpose_n_insert(
+    pub(crate) fn transpose_n_insert(
         word: String,
         set: &HashMap<String, u32>,
         current_edit: u8,
