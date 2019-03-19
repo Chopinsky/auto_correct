@@ -1,5 +1,5 @@
 use crossbeam_channel as channel;
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 
 use crate::AutoCorrect;
 use crate::candidate::Candidate;
@@ -21,21 +21,21 @@ pub(crate) fn candidate(
     max_edit: u8,
     locale: SupportedLocale,
     tx_async: &Option<channel::Sender<Candidate>>,
-) -> Vec<Candidate> {
+) -> HashSet<Candidate> {
     if edit >= max_edit {
-        return Vec::new();
+        return HashSet::new();
     }
 
     let word = word.trim().to_lowercase();
     if word.is_empty() {
-        return Vec::new();
+        return HashSet::new();
     }
 
     // if already a correct word, we're done
     let mut results = if tx_async.is_none() {
-        Vec::with_capacity(2 * word.len())
+        HashSet::with_capacity(2 * word.len())
     } else {
-        Vec::new()
+        HashSet::new()
     };
 
     if let Some(set) = dict_ref() {
@@ -44,10 +44,10 @@ pub(crate) fn candidate(
 
             if let Some(tx) = tx_async {
                 if let Err(_) = tx.send(candidate) {
-                    return Vec::new();
+                    return HashSet::new();
                 }
             } else {
-                results.push(candidate);
+                results.insert(candidate);
             }
         }
     }
@@ -125,15 +125,15 @@ pub(crate) fn candidate(
         }
     });
 
-    // move rx into the scope so it can drop afterwards
-    for candidate in rx {
-        if !results.contains(&candidate) {
+    {
+        // move rx into the scope so it can drop afterwards
+        for candidate in rx {
             if let Some(chan) = tx_async {
                 if chan.send(candidate).is_err() {
                     return results;
                 }
             } else {
-                results.push(candidate);
+                results.insert(candidate);
             }
         }
     }
@@ -147,18 +147,9 @@ pub(crate) fn candidate(
             if tx_async.is_none() {
                 // if using async channel, results have already been sent
                 results.reserve(received.len());
-
-                for candidate in received {
-                    if !results.contains(&candidate) {
-                        results.push(candidate);
-                    }
-                }
+                results.extend(received);
             }
         }
-    }
-
-    if edit == 0 && results.len() > 1 {
-        results.sort_by(|a, b| b.cmp(&a));
     }
 
     results
@@ -169,7 +160,7 @@ fn find_next_edit_candidates(
     max_edit: u8,
     locale: SupportedLocale,
     rx_next: channel::Receiver<String>,
-    tx: channel::Sender<Vec<Candidate>>,
+    tx: channel::Sender<HashSet<Candidate>>,
     tx_async: &Option<channel::Sender<Candidate>>,
 ) {
     for next in rx_next {

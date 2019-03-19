@@ -129,7 +129,7 @@ fn send_one(
         }
     }
 
-    if let Some(score) = set.get(&target) {
+    if let Some((_, score)) = set.get_key_value(&target) {
         store
             .send(Candidate::new(target, score.to_owned(), edit))
             .unwrap_or_else(|err| {

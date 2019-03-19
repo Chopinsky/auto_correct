@@ -63,10 +63,16 @@ impl AutoCorrect {
         let locale = self.config.get_locale();
 
         stores::get_ready();
-        let result = dynamic::candidate(word, 0, max_edit, locale, &mut None);
+        let mut result = dynamic::candidate(word, 0, max_edit, locale, &mut None);
         stores::reset();
 
-        result
+        let mut vec = Vec::with_capacity(result.len());
+        result.drain().for_each(|candidate| {
+            vec.push(candidate);
+        });
+
+        vec.sort_by(|a, b| b.cmp(a));
+        vec
     }
 
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {

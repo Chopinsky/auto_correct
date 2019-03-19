@@ -36,7 +36,7 @@ fn main() {
 
                 // run multiple times to benchmark
                 let mut set = HashSet::new();
-                let mut done = false;
+                let mut done = true;
 
                 for _ in 0..LEN {
                     let check = input.clone();
