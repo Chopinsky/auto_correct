@@ -63,7 +63,8 @@ impl AutoCorrect {
         let locale = self.config.get_locale();
 
         stores::get_ready();
-        let mut result = dynamic::candidate(word, 0, max_edit, locale, &mut None);
+        let mut result =
+            dynamic::candidate(word, 0, max_edit, locale, &mut None, 0);
         stores::reset();
 
         let mut vec = Vec::with_capacity(result.len());
@@ -82,7 +83,7 @@ impl AutoCorrect {
 
         stores::get_ready();
         AutoCorrect::run_job(move || {
-            dynamic::candidate(word, 0, max_edit, locale, &mut Some(tx_cache));
+            dynamic::candidate(word, 0, max_edit, locale, &mut Some(tx_cache), 0);
         });
 
         let mut cache = HashSet::with_capacity(16);

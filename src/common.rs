@@ -23,7 +23,8 @@ pub(crate) fn ins_repl(
     set: &HashMap<String, u32>,
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
-    tx_next: Option<channel::Sender<String>>
+    tx_next: Option<channel::Sender<(String, u32)>>,
+    marker: u32,
 ) {
     let size = word.len();
     if size == 0 {
@@ -37,6 +38,10 @@ pub(crate) fn ins_repl(
         let rune_code = get_char_code(rune, 0);
 
         for pos in 0..=size {
+            if check_bit(marker, pos) {
+                continue;
+            }
+
             if pos > 0 {
                 let (left, right) = {
                     if pos < size {
@@ -60,17 +65,17 @@ pub(crate) fn ins_repl(
 
                 // insert
                 send_one([left, rune, right].join(""),
-                         current_edit, set, &tx_curr, &tx_next);
+                         current_edit, set, &tx_curr, &tx_next, mark_bit(marker, pos, true));
 
                 // replace
                 if rune_code != get_char_code(word, pos - 1) {
                     send_one([&left[..pos - 1], rune, right].join(""),
-                             current_edit, set, &tx_curr, &tx_next);
+                             current_edit, set, &tx_curr, &tx_next, mark_bit(marker, pos, false));
                 }
             } else {
                 // if pos == 0, just insert
                 send_one([rune, word].join(""),
-                         current_edit, set, &tx_curr, &tx_next);
+                         current_edit, set, &tx_curr, &tx_next, mark_bit(marker, pos, true));
             }
         }
     }
@@ -81,7 +86,8 @@ pub(crate) fn del_tran(
     set: &HashMap<String, u32>,
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
-    tx_next: Option<channel::Sender<String>>
+    tx_next: Option<channel::Sender<(String, u32)>>,
+    marker: u32
 ) {
     let size = word.len();
     if size <= 1 {
@@ -102,12 +108,12 @@ pub(crate) fn del_tran(
 
         // delete
         send_one([left, right].join(""),
-                 current_edit, set, &tx_curr, &tx_next);
+                 current_edit, set, &tx_curr, &tx_next, marker);
 
         // transpose
         if pos < size {
             send_one([left, &right[..1], del, &right[1..]].join(""),
-                     current_edit, set, &tx_curr, &tx_next);
+                     current_edit, set, &tx_curr, &tx_next, marker);
         }
     }
 }
@@ -117,12 +123,13 @@ fn send_one(
     edit: u8,
     set: &HashMap<String, u32>,
     store: &channel::Sender<Candidate>,
-    tx_next: &Option<channel::Sender<String>>
+    tx_next: &Option<channel::Sender<(String, u32)>>,
+    marker: u32
 ) {
     if let Some(next_chan) = tx_next {
         if !stores::contains(&target) {
             next_chan
-                .send(target.clone())
+                .send((target.clone(), marker))
                 .unwrap_or_else(|err| {
                     eprintln!("Failed to search the string: {:?}", err);
                 });
@@ -265,6 +272,32 @@ fn update_reverse_dict(word: String, variation: String, dict: &mut HashMap<Strin
     }
 
     dict.insert(variation, vec![word]);
+}
+
+fn mark_bit(source: u32, pos: usize, insert: bool) -> u32 {
+    if pos >= 32 {
+        return source;
+    }
+
+    if insert {
+        // an insert, shift the bits
+        if pos == 31 {
+            source | (1 << 31)
+        } else if pos == 0 {
+            source | 1
+        } else {
+            (source >> pos << (pos + 1))                // upper portions
+                | (1 << pos)                            // insert 1 to the pos
+                | (source << (32 - pos) >> (32 - pos))  // lower portions
+        }
+    } else {
+        // a replace, just mask
+        source | (1 << pos)
+    }
+}
+
+fn check_bit(source: u32, pos: usize) -> bool {
+    source & (1 << pos) > 0
 }
 
 pub(crate) mod deprecated {

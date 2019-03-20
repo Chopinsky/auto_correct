@@ -21,6 +21,7 @@ pub(crate) fn candidate(
     max_edit: u8,
     locale: SupportedLocale,
     tx_async: &Option<channel::Sender<Candidate>>,
+    marker: u32
 ) -> HashSet<Candidate> {
     if edit >= max_edit {
         return HashSet::new();
@@ -75,7 +76,8 @@ pub(crate) fn candidate(
                 set,
                 current_edit,
                 tx_clone,
-                tx_next_clone
+                tx_next_clone,
+                marker
             );
 
 /*
@@ -110,7 +112,8 @@ pub(crate) fn candidate(
                 set,
                 current_edit,
                 tx,
-                tx_next
+                tx_next,
+                marker
             );
 
 /*
@@ -159,17 +162,18 @@ fn find_next_edit_candidates(
     edit: u8,
     max_edit: u8,
     locale: SupportedLocale,
-    rx_next: channel::Receiver<String>,
+    rx_next: channel::Receiver<(String, u32)>,
     tx: channel::Sender<HashSet<Candidate>>,
     tx_async: &Option<channel::Sender<Candidate>>,
 ) {
-    for next in rx_next {
+    for (next, marker) in rx_next {
         let candidates = candidate(
             next,
             edit,
             max_edit,
             locale,
             tx_async,
+            marker
         );
 
         if !candidates.is_empty() {
