@@ -16,6 +16,7 @@ mod dynamic;
 mod hybrid;
 mod stores;
 mod support;
+mod trie;
 
 pub mod prelude {
     pub use candidate::Candidate;
