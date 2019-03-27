@@ -1,11 +1,14 @@
-use crossbeam_channel as channel;
+use std::thread;
 use hashbrown::{HashMap, HashSet};
 
 use crate::AutoCorrect;
+use crate::crossbeam_channel as channel;
 use crate::candidate::Candidate;
 use crate::common;
 use crate::config::Config;
 use crate::config::SupportedLocale;
+use crate::trie::Node;
+use std::time::Duration;
 
 static mut DICT: Option<HashMap<String, u32>> = None;
 
@@ -39,6 +42,19 @@ pub(crate) fn candidate(
         HashSet::new()
     };
 
+    if let Some(score) = Node::check(&word) {
+        let candidate = Candidate::new(word.to_owned(), score, edit);
+
+        if let Some(tx) = tx_async {
+            if let Err(_) = tx.send(candidate) {
+                return HashSet::new();
+            }
+        } else {
+            results.insert(candidate);
+        }
+    }
+
+/*
     if let Some(set) = dict_ref() {
         if set.contains_key(&word) {
             let candidate = Candidate::new(word.to_owned(), set[&word], edit);
@@ -52,6 +68,7 @@ pub(crate) fn candidate(
             }
         }
     }
+*/
 
     // if a misspell, find the correct one within 1 edit distance
     let (tx, rx) = channel::bounded(64);
@@ -70,15 +87,13 @@ pub(crate) fn candidate(
     let tx_clone = tx.clone();
 
     AutoCorrect::run_job(move || {
-        if let Some(set) = dict_ref() {
-            common::ins_repl(
-                &word_clone,
-                set,
-                current_edit,
-                tx_clone,
-                tx_next_clone,
-                marker
-            );
+        common::ins_repl(
+            &word_clone,
+            current_edit,
+            tx_clone,
+            tx_next_clone,
+            marker
+        );
 
 /*
             common::deprecated::delete_n_replace(
@@ -88,8 +103,8 @@ pub(crate) fn candidate(
                 tx_clone,
                 tx_next_clone
             )
-*/
         }
+*/
     });
 
     let mut rx_next = rx_next.and_then(|chan| {
@@ -106,17 +121,16 @@ pub(crate) fn candidate(
     });
 
     AutoCorrect::run_job(move || {
-        if let Some(set) = dict_ref() {
-            common::del_tran(
-                &word,
-                set,
-                current_edit,
-                tx,
-                tx_next,
-                marker
-            );
+        common::del_tran(
+            &word,
+            current_edit,
+            tx,
+            tx_next,
+            marker
+        );
 
 /*
+        if let Some(set) = dict_ref() {
             common::deprecated::transpose_n_insert(
                 word,
                 set,
@@ -124,8 +138,8 @@ pub(crate) fn candidate(
                 tx,
                 tx_next
             );
-*/
         }
+*/
     });
 
     {
@@ -184,37 +198,37 @@ fn find_next_edit_candidates(
 
 fn populate_words_set(config: &Config) -> Result<(), String> {
     let (tx, rx) = channel::unbounded();
+    let (tx_alt, rx_alt) = channel::unbounded();
     let dict_path = config.get_dict_path();
 
     AutoCorrect::run_job(move || {
         common::load_dict_async(dict_path, tx);
     });
 
-    if let Some(set) = dict_mut() {
-        for received in rx {
-            let temp: Vec<&str> = received.splitn(2, common::DELIM).collect();
-            if temp[0].is_empty() {
-                continue;
-            }
+    AutoCorrect::run_job(move || {
+        Node::build(rx_alt);
+    });
 
-            if let Ok(score) = temp[1].parse::<u32>() {
-                let key = temp[0].to_owned();
-
-                // if a larger score exists, use the larger score
-                if set.contains_key(&key) && set[&key] >= score {
-                    continue;
-                }
-
-                set.insert(key, score);
-            }
+    for received in rx {
+        let temp: Vec<&str> = received.splitn(2, common::DELIM).collect();
+        if temp[0].is_empty() {
+            continue;
         }
 
-        set.shrink_to_fit();
+        if let Ok(score) = temp[1].parse::<u32>() {
+            let key = temp[0].to_owned();
 
-        return Ok(());
+            tx_alt.send((key, score)).unwrap_or_else(|err| {
+                eprintln!("Failed to populate the dict: {:?}", err);
+            });
+        }
     }
 
-    Err(String::from("Unable to write to the words set..."))
+    thread::sleep(Duration::from_millis(24));
+
+    //TODO: needs to make sure the dict is built completely
+
+    Ok(())
 }
 
 #[inline]

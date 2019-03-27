@@ -8,6 +8,7 @@ extern crate lazy_static;
 extern crate crossbeam_channel;
 extern crate threads_pool;
 extern crate hashbrown;
+extern crate proc_macro;
 
 mod candidate;
 mod common;
@@ -204,14 +205,15 @@ pub trait ServiceUtils {
 
 impl ServiceUtils for AutoCorrect {
     fn refresh_hybrid_dict(&self, _custom_path: Option<String>) -> Result<(), String> {
-        let dict =
+        //TODO: now compress and save the result to disk
+
+/*        let dict =
             common::generate_reverse_dict(&self.config);
 
-        //TODO: now compress and save the result to disk
 
         if self.config.get_run_mode() == RunMode::SpeedSensitive {
             hybrid::set_reverse_dict(dict);
-        }
+        }*/
 
         Ok(())
     }

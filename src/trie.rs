@@ -1,9 +1,10 @@
 use std::char;
 use channel::Receiver;
-use support::en_us;
+use crate::support::en_us;
 
 static mut DICT: Option<Node> = None;
 
+#[derive(Debug)]
 pub(crate) struct Node {
     rune: char,
     occupied: u32,
@@ -27,32 +28,42 @@ impl Node {
 
     pub(crate) fn build(rx: Receiver<(String, u32)>) {
         if let Some(root) = dict_mut() {
-            for (word, score) in rx.recv() {
-                root.insert(word, score, 0);
+            loop {
+                if let Ok((word, score)) = rx.recv() {
+//                    println!("{} @ {}", word, score);
+
+                    let clone = word.clone();
+                    let mut chars = clone.chars();
+                    let mut vec: Vec<char> = Vec::with_capacity(word.len());
+
+                    while let Some(rune) = chars.next() {
+                        vec.push(rune.clone());
+                    }
+
+                    root.insert((word, score), vec.as_slice(), 0);
+                }
             }
         }
     }
 
-    pub(crate) fn contains(word: &str) -> Option<u32> {
+    pub(crate) fn check(word: &str) -> Option<u32> {
         if let Some(root) = dict_ref() {
             let mut curr = root;
+            let mut chars = word.chars();
 
-            'outer: while let Some(rune) = word.chars().next() {
+            while let Some(rune) = chars.next() {
                 // quick reject
                 if curr.occupied == 0 || !curr.check_bit(rune) {
                     return None;
                 }
 
                 // check which child match the current rune
-                for child in curr.children.as_slice() {
+                for child in curr.children.iter() {
                     if child.rune == rune {
                         curr = child;
-                        continue 'outer;
+                        break;
                     }
                 }
-
-                // shouldn't happen since we've checked the bits, but just be sure
-                return None;
             }
 
             return curr.word.as_ref().and_then(|(_, score)| Some(score.clone()));
@@ -61,18 +72,19 @@ impl Node {
         None
     }
 
-    fn insert(&mut self, word: String, score: u32, index: usize) {
-        let len = word.len();
+    fn insert(&mut self, content: (String, u32), arr: &[char], index: usize) {
+        let len = arr.len();
         if len == 0 || index >= len {
+            eprintln!("Failed to insert: {} ({:?} @ {}), len: {}", content.0, arr, index, len);
             return;
         }
 
-        let (pos, rune) = find_child_pos(&self.children, &word, index);
+        let (pos, rune) = find_child_pos(&self.children, arr[index]);
         if pos == self.children.len() {
             self.add_bit(rune);
 
             if index == len - 1 {
-                self.children.push(Node::new_with(rune, Some((word, score))));
+                self.children.push(Node::new_with(rune, Some(content)));
                 return;
             } else {
                 self.children.push(Node::new_with(rune, None));
@@ -82,16 +94,16 @@ impl Node {
         if let Some(child) = self.children.get_mut(pos) {
             if index == len - 1 {
                 // update child node if this is the whole word
-                child.word = Some((word, score));
+                child.word = Some(content);
             } else {
                 // insert to the child if not the last character
-                child.insert(word, score, index + 1);
+                child.insert(content, arr, index + 1);
             };
         }
     }
 
     fn check_bit(&self, rune: char) -> bool {
-        (self.occupied & (1 << en_us::get_char_code(rune))) == 1
+        (self.occupied >> en_us::get_char_code(rune)) & 1 == 1
     }
 
     fn add_bit(&mut self, rune: char) {
@@ -110,24 +122,18 @@ impl Default for Node {
     }
 }
 
-fn find_child_pos(children: &Vec<Node>, word: &str, index: usize) -> (usize, char) {
-    if let Some(raw) = word.as_bytes().get(index) {
-        if let Some(rune) = char::from_u32(*raw as u32) {
-            let mut index = 0;
+fn find_child_pos(children: &Vec<Node>, rune: char) -> (usize, char) {
+    let mut index = 0;
 
-            for child in children.iter() {
-                if child.rune == rune {
-                    break;
-                }
-
-                index += 1;
-            }
-
-            return (index, rune);
+    for child in children.iter() {
+        if child.rune == rune {
+            break;
         }
+
+        index += 1;
     }
 
-    (children.len(), '\u{0000}')
+    return (index, rune);
 }
 
 #[inline]

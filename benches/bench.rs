@@ -14,7 +14,7 @@ fn bench_base(c: &mut Criterion) {
 
         b.iter(|| {
             let results = service.candidates(String::from("tets"));
-            assert_eq!(results.len(), 360usize);
+            assert_eq!(results.len(), 367usize);
         })
     });
 }

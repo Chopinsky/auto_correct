@@ -7,20 +7,19 @@ use std::str::Chars;
 use std::cmp::Ordering;
 
 use crossbeam_channel as channel;
-use hashbrown::HashMap;
 use crate::AutoCorrect;
 use crate::candidate::Candidate;
-use crate::config::{AutoCorrectConfig, Config};
+use crate::config::Config;
 use crate::stores;
 use crate::SupportedLocale;
 use crate::support::en_us;
+use crate::trie::Node;
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
 
 pub(crate) fn ins_repl(
     word: &str,
-    set: &HashMap<String, u32>,
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
     tx_next: Option<channel::Sender<(String, u32)>>,
@@ -65,17 +64,17 @@ pub(crate) fn ins_repl(
 
                 // insert
                 send_one([left, rune, right].join(""),
-                         current_edit, set, &tx_curr, &tx_next, mark_bit(marker, pos, true));
+                         current_edit, &tx_curr, &tx_next, mark_bit(marker, pos, true));
 
                 // replace
                 if rune_code != get_char_code(word, pos - 1) {
                     send_one([&left[..pos - 1], rune, right].join(""),
-                             current_edit, set, &tx_curr, &tx_next, mark_bit(marker, pos, false));
+                             current_edit, &tx_curr, &tx_next, mark_bit(marker, pos, false));
                 }
             } else {
                 // if pos == 0, just insert
                 send_one([rune, word].join(""),
-                         current_edit, set, &tx_curr, &tx_next, mark_bit(marker, pos, true));
+                         current_edit, &tx_curr, &tx_next, mark_bit(marker, pos, true));
             }
         }
     }
@@ -83,7 +82,6 @@ pub(crate) fn ins_repl(
 
 pub(crate) fn del_tran(
     word: &str,
-    set: &HashMap<String, u32>,
     current_edit: u8,
     tx_curr: channel::Sender<Candidate>,
     tx_next: Option<channel::Sender<(String, u32)>>,
@@ -108,12 +106,12 @@ pub(crate) fn del_tran(
 
         // delete
         send_one([left, right].join(""),
-                 current_edit, set, &tx_curr, &tx_next, marker);
+                 current_edit, &tx_curr, &tx_next, marker);
 
         // transpose
         if pos < size {
             send_one([left, &right[..1], del, &right[1..]].join(""),
-                     current_edit, set, &tx_curr, &tx_next, marker);
+                     current_edit, &tx_curr, &tx_next, marker);
         }
     }
 }
@@ -121,7 +119,6 @@ pub(crate) fn del_tran(
 fn send_one(
     target: String,
     edit: u8,
-    set: &HashMap<String, u32>,
     store: &channel::Sender<Candidate>,
     tx_next: &Option<channel::Sender<(String, u32)>>,
     marker: u32
@@ -136,35 +133,13 @@ fn send_one(
         }
     }
 
-    if let Some((_, score)) = set.get_key_value(&target) {
+    if let Some(score) = Node::check(&target) {
         store
-            .send(Candidate::new(target, score.to_owned(), edit))
+            .send(Candidate::new(target, score, edit))
             .unwrap_or_else(|err| {
                 eprintln!("Failed to search the string: {:?}", err);
             });
     }
-}
-
-pub(crate) fn generate_reverse_dict(config: &Config) -> HashMap<String, Vec<String>> {
-    let mut result: HashMap<String, Vec<String>> = HashMap::new();
-
-    // one worker to read from file
-    let (tx, rx) = channel::unbounded();
-    let dict_path = config.get_dict_path();
-    let locale = config.get_locale();
-
-    AutoCorrect::run_job(move || {
-        load_dict_async(dict_path, tx);
-    });
-
-    // one worker to write to memory
-    for word in rx {
-        for variation in find_variations(word.clone(), locale) {
-            update_reverse_dict(word.clone(), variation, &mut result);
-        }
-    }
-
-    result
 }
 
 pub(crate) fn find_variations(
@@ -201,7 +176,9 @@ pub(crate) fn load_dict_async(dict_path: String, tx: channel::Sender<String>) {
 
     for raw_line in reader.lines() {
         if let Ok(line) = raw_line {
-            tx.send(line).expect("Failed to load the dictionary...");
+            if let Err(_) = tx.send(line) {
+                return;
+            }
         }
     }
 }
@@ -258,20 +235,7 @@ fn variations_at_pos(
 fn get_char_set(locale: SupportedLocale) -> Chars<'static> {
     match locale {
         SupportedLocale::EnUs => en_us::ALPHABET_EN.chars(),
-        _ => en_us::ALPHABET_EN.chars(),
     }
-}
-
-fn update_reverse_dict(word: String, variation: String, dict: &mut HashMap<String, Vec<String>>) {
-    if let Some(vec) = dict.get_mut(&variation) {
-        if !vec.contains(&word) {
-            vec.push(word);
-        }
-
-        return;
-    }
-
-    dict.insert(variation, vec![word]);
 }
 
 fn mark_bit(source: u32, pos: usize, insert: bool) -> u32 {
@@ -303,8 +267,11 @@ fn check_bit(source: u32, pos: usize) -> bool {
 pub(crate) mod deprecated {
     use crossbeam_channel as channel;
     use hashbrown::HashMap;
+    use crate::AutoCorrect;
     use crate::candidate::Candidate;
+    use crate::config::AutoCorrectConfig;
     use crate::support::en_us;
+    use super::*;
 
     pub(crate) fn delete_n_replace(
         word: String,
@@ -422,5 +389,39 @@ pub(crate) mod deprecated {
                 eprintln!("Failed to search the string: {:?}", err);
             });
         }
+    }
+
+    fn generate_reverse_dict(config: &Config) -> HashMap<String, Vec<String>> {
+        let mut result: HashMap<String, Vec<String>> = HashMap::new();
+
+        // one worker to read from file
+        let (tx, rx) = channel::unbounded();
+        let dict_path = config.get_dict_path();
+        let locale = config.get_locale();
+
+        AutoCorrect::run_job(move || {
+            load_dict_async(dict_path, tx);
+        });
+
+        // one worker to write to memory
+        for word in rx {
+            for variation in find_variations(word.clone(), locale) {
+                update_reverse_dict(word.clone(), variation, &mut result);
+            }
+        }
+
+        result
+    }
+
+    fn update_reverse_dict(word: String, variation: String, dict: &mut HashMap<String, Vec<String>>) {
+        if let Some(vec) = dict.get_mut(&variation) {
+            if !vec.contains(&word) {
+                vec.push(word);
+            }
+
+            return;
+        }
+
+        dict.insert(variation, vec![word]);
     }
 }
