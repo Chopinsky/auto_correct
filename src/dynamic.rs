@@ -1,6 +1,4 @@
-use std::thread;
-use hashbrown::{HashMap, HashSet};
-
+use hashbrown::HashSet;
 use crate::AutoCorrect;
 use crate::crossbeam_channel as channel;
 use crate::candidate::Candidate;
@@ -8,9 +6,6 @@ use crate::common;
 use crate::config::Config;
 use crate::config::SupportedLocale;
 use crate::trie::Node;
-use std::time::Duration;
-
-static mut DICT: Option<HashMap<String, u32>> = None;
 
 pub(crate) fn initialize(service: &AutoCorrect) {
     if let Err(e) = populate_words_set(&service.config) {
@@ -198,53 +193,13 @@ fn find_next_edit_candidates(
 
 fn populate_words_set(config: &Config) -> Result<(), String> {
     let (tx, rx) = channel::unbounded();
-    let (tx_alt, rx_alt) = channel::unbounded();
     let dict_path = config.get_dict_path();
 
     AutoCorrect::run_job(move || {
         common::load_dict_async(dict_path, tx);
     });
 
-    AutoCorrect::run_job(move || {
-        Node::build(rx_alt);
-    });
-
-    for received in rx {
-        let temp: Vec<&str> = received.splitn(2, common::DELIM).collect();
-        if temp[0].is_empty() {
-            continue;
-        }
-
-        if let Ok(score) = temp[1].parse::<u32>() {
-            let key = temp[0].to_owned();
-
-            tx_alt.send((key, score)).unwrap_or_else(|err| {
-                eprintln!("Failed to populate the dict: {:?}", err);
-            });
-        }
-    }
-
-    thread::sleep(Duration::from_millis(24));
-
-    //TODO: needs to make sure the dict is built completely
+    Node::build(rx);
 
     Ok(())
-}
-
-#[inline]
-fn dict_ref() -> Option<&'static HashMap<String, u32>> {
-    unsafe { DICT.as_ref() }
-}
-
-#[inline]
-fn dict_mut() -> Option<&'static mut HashMap<String, u32>> {
-    unsafe {
-        if DICT.is_none() {
-            DICT.replace(
-                HashMap::with_capacity(50_000)
-            );
-        }
-
-        DICT.as_mut()
-    }
 }

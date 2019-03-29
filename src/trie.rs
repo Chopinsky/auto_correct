@@ -1,5 +1,7 @@
 use std::char;
 use channel::Receiver;
+
+use crate::common;
 use crate::support::en_us;
 
 static mut DICT: Option<Node> = None;
@@ -26,11 +28,16 @@ impl Node {
         }
     }
 
-    pub(crate) fn build(rx: Receiver<(String, u32)>) {
+    pub(crate) fn build(rx: Receiver<String>) {
         if let Some(root) = dict_mut() {
-            loop {
-                if let Ok((word, score)) = rx.recv() {
-//                    println!("{} @ {}", word, score);
+            for received in rx {
+                let temp: Vec<&str> = received.splitn(2, common::DELIM).collect();
+                if temp[0].is_empty() {
+                    continue;
+                }
+
+                if let Ok(score) = temp[1].parse::<u32>() {
+                    let word = temp[0].to_owned();
 
                     let clone = word.clone();
                     let mut chars = clone.chars();
