@@ -37,7 +37,6 @@ use threads_pool::ThreadPool;
 //TODO: customizable score function
 
 static mut POOL: Option<ThreadPool> = None;
-const POOL_SIZE: usize = 8;
 
 pub struct AutoCorrect {
     config: Config,
@@ -54,7 +53,7 @@ impl AutoCorrect {
             config,
         };
 
-        AutoCorrect::pool_init(POOL_SIZE);
+        AutoCorrect::pool_init(service.config.get_pool_size());
         service.init_dict();
 
         service
@@ -65,15 +64,22 @@ impl AutoCorrect {
         let locale = self.config.get_locale();
 
         stores::get_ready();
-        let mut result =
-            dynamic::candidate(word, 0, max_edit, locale, &mut None, 0);
-        stores::reset();
 
-        let mut vec = Vec::with_capacity(result.len());
-        result.drain().for_each(|candidate| {
-            vec.push(candidate);
+        let (tx, rx) = channel::bounded(256);
+        AutoCorrect::run_job(move || {
+            dynamic::candidate(word, 0, max_edit, locale, &tx, 0);
         });
 
+        let mut vec = Vec::with_capacity(256);
+        for candidate in rx {
+            if !vec.contains(&candidate) {
+                vec.push(candidate);
+            }
+        }
+
+        stores::reset();
+
+        vec.shrink_to_fit();
         vec.sort_by(|a, b| b.cmp(a));
         vec
     }
@@ -81,14 +87,14 @@ impl AutoCorrect {
     pub fn candidates_async(&self, word: String, tx: mpsc::Sender<Candidate>) {
         let max_edit = self.config.get_max_edit();
         let locale = self.config.get_locale();
-        let (tx_cache, rx_cache) = channel::unbounded();
+        let (tx_cache, rx_cache) = channel::bounded(256);
 
         stores::get_ready();
         AutoCorrect::run_job(move || {
-            dynamic::candidate(word, 0, max_edit, locale, &mut Some(tx_cache), 0);
+            dynamic::candidate(word, 0, max_edit, locale, &tx_cache, 0);
         });
 
-        let mut cache = HashSet::with_capacity(16);
+        let mut cache = HashSet::with_capacity(256);
         for result in rx_cache {
             if !cache.contains(&result.word) {
                 cache.insert(result.word.clone());
@@ -145,6 +151,15 @@ impl AutoCorrectConfig for AutoCorrect {
     #[inline]
     fn get_max_edit(&self) -> u8 {
         self.config.get_max_edit()
+    }
+
+    fn set_pool_size(&mut self, pool_size: usize) {
+        self.config.set_pool_size(pool_size);
+    }
+
+    #[inline]
+    fn get_pool_size(&self) -> usize {
+        self.config.get_pool_size()
     }
 
     fn set_locale(&mut self, locale: SupportedLocale) {

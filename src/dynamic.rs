@@ -1,4 +1,3 @@
-use hashbrown::HashSet;
 use crate::AutoCorrect;
 use crate::crossbeam_channel as channel;
 use crate::candidate::Candidate;
@@ -18,34 +17,21 @@ pub(crate) fn candidate(
     edit: u8,
     max_edit: u8,
     locale: SupportedLocale,
-    tx_async: &Option<channel::Sender<Candidate>>,
+    tx_async: &channel::Sender<Candidate>,
     marker: u32
-) -> HashSet<Candidate> {
+) {
     if edit >= max_edit {
-        return HashSet::new();
+        return;
     }
-
++
     let word = word.trim().to_lowercase();
     if word.is_empty() {
-        return HashSet::new();
+        return;
     }
 
-    // if already a correct word, we're done
-    let mut results = if tx_async.is_none() {
-        HashSet::with_capacity(2 * word.len())
-    } else {
-        HashSet::new()
-    };
-
     if let Some(score) = Node::check(&word) {
-        let candidate = Candidate::new(word.to_owned(), score, edit);
-
-        if let Some(tx) = tx_async {
-            if let Err(_) = tx.send(candidate) {
-                return HashSet::new();
-            }
-        } else {
-            results.insert(candidate);
+        if tx_async.send(Candidate::new(word.to_owned(), score, edit)).is_err() {
+            return;
         }
     }
 
@@ -66,7 +52,7 @@ pub(crate) fn candidate(
 */
 
     // if a misspell, find the correct one within 1 edit distance
-    let (tx, rx) = channel::bounded(64);
+    let (tx_curr, rx_curr) = channel::bounded(64);
     let current_edit = edit + 1;
 
     let (tx_next, tx_next_clone, rx_next) =
@@ -79,7 +65,7 @@ pub(crate) fn candidate(
         };
 
     let word_clone = word.clone();
-    let tx_clone = tx.clone();
+    let tx_clone = tx_curr.clone();
 
     AutoCorrect::run_job(move || {
         common::ins_repl(
@@ -102,24 +88,20 @@ pub(crate) fn candidate(
 */
     });
 
-    let mut rx_next = rx_next.and_then(|chan| {
-        let (tx_raw, rx_raw) = channel::bounded(16);
-        let tx_async_clone = tx_async.clone();
-
+    if let Some(chan) = rx_next {
+        let tx = tx_async.clone();
         AutoCorrect::run_job(move || {
             find_next_edit_candidates(
-                current_edit, max_edit, locale, chan, tx_raw, &tx_async_clone
+                current_edit, max_edit, locale, chan, &tx
             );
         });
-
-        Some(rx_raw)
-    });
+    }
 
     AutoCorrect::run_job(move || {
         common::del_tran(
             &word,
             current_edit,
-            tx,
+            tx_curr,
             tx_next,
             marker
         );
@@ -137,34 +119,12 @@ pub(crate) fn candidate(
 */
     });
 
-    {
-        // move rx into the scope so it can drop afterwards
-        for candidate in rx {
-            if let Some(chan) = tx_async {
-                if chan.send(candidate).is_err() {
-                    return results;
-                }
-            } else {
-                results.insert(candidate);
-            }
+    // move rx into the scope so it can drop afterwards
+    for candidate in rx_curr {
+        if tx_async.send(candidate).is_err() {
+            return;
         }
     }
-
-    if let Some(chan) = rx_next.take() {
-        for received in chan {
-            if received.is_empty() {
-                continue;
-            }
-
-            if tx_async.is_none() {
-                // if using async channel, results have already been sent
-                results.reserve(received.len());
-                results.extend(received);
-            }
-        }
-    }
-
-    results
 }
 
 fn find_next_edit_candidates(
@@ -172,11 +132,10 @@ fn find_next_edit_candidates(
     max_edit: u8,
     locale: SupportedLocale,
     rx_next: channel::Receiver<(String, u32)>,
-    tx: channel::Sender<HashSet<Candidate>>,
-    tx_async: &Option<channel::Sender<Candidate>>,
+    tx_async: &channel::Sender<Candidate>
 ) {
     for (next, marker) in rx_next {
-        let candidates = candidate(
+        candidate(
             next,
             edit,
             max_edit,
@@ -184,10 +143,6 @@ fn find_next_edit_candidates(
             tx_async,
             marker
         );
-
-        if !candidates.is_empty() {
-            tx.send(candidates).expect("Failed to send the search result...");;
-        }
     }
 }
 

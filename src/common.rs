@@ -119,7 +119,7 @@ pub(crate) fn del_tran(
 fn send_one(
     target: String,
     edit: u8,
-    store: &channel::Sender<Candidate>,
+    chan: &channel::Sender<Candidate>,
     tx_next: &Option<channel::Sender<(String, u32)>>,
     marker: u32
 ) {
@@ -134,7 +134,7 @@ fn send_one(
     }
 
     if let Some(score) = Node::check(&target) {
-        store
+        chan
             .send(Candidate::new(target, score, edit))
             .unwrap_or_else(|err| {
                 eprintln!("Failed to search the string: {:?}", err);

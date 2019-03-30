@@ -2,6 +2,7 @@
 
 const DEFAULT_MAX_EDIT: u8 = 1;
 const MAX_EDIT_THRESHOLD: u8 = 3;
+const POOL_SIZE: usize = 12;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum SupportedLocale {
@@ -16,6 +17,7 @@ pub enum RunMode {
 
 pub struct Config {
     max_edit: u8,
+    pool_size: usize,
     locale: SupportedLocale,
     run_mode: RunMode,
     override_dict: String,
@@ -24,18 +26,25 @@ pub struct Config {
 impl Config {
     #[inline]
     pub fn new() -> Config {
-        Config::new_with_params(1, SupportedLocale::EnUs,
-                                RunMode::SpaceSensitive, "")
+        Config::new_with_params(
+            1,
+            POOL_SIZE,
+            SupportedLocale::EnUs,
+            RunMode::SpaceSensitive,
+            ""
+        )
     }
 
     pub fn new_with_params(
         max_edit: u8,
+        pool_size: usize,
         locale: SupportedLocale,
         run_mode: RunMode,
         override_dict: &str
     ) -> Config {
         Config {
             max_edit: normalize_max_edit(max_edit),
+            pool_size,
             locale,
             run_mode,
             override_dict: override_dict.to_owned(),
@@ -45,8 +54,7 @@ impl Config {
     pub fn get_dict_path(&self) -> String {
         if self.override_dict.is_empty() {
             let locale = match self.locale {
-                SupportedLocale::EnUs => "en-us",
-                _ => "en-us",
+                SupportedLocale::EnUs => "en-us"
             };
 
             match self.run_mode {
@@ -68,6 +76,8 @@ impl Default for Config {
 pub trait AutoCorrectConfig {
     fn set_max_edit(&mut self, max_edit: u8);
     fn get_max_edit(&self) -> u8;
+    fn set_pool_size(&mut self, pool_size: usize);
+    fn get_pool_size(&self) -> usize;
     fn set_locale(&mut self, locale: SupportedLocale);
     fn get_locale(&self) -> SupportedLocale;
     fn set_run_mode(&mut self, mode: RunMode);
@@ -85,6 +95,15 @@ impl AutoCorrectConfig for Config {
     #[inline]
     fn get_max_edit(&self) -> u8 {
         self.max_edit
+    }
+
+    fn set_pool_size(&mut self, pool_size: usize) {
+        self.pool_size = pool_size;
+    }
+
+    #[inline]
+    fn get_pool_size(&self) -> usize {
+        self.pool_size
     }
 
     #[inline]
@@ -119,7 +138,13 @@ impl AutoCorrectConfig for Config {
 
 impl Clone for Config {
     fn clone(&self) -> Self {
-        Config::new_with_params(self.max_edit, self.locale, self.run_mode, &self.override_dict[..])
+        Config::new_with_params(
+            self.max_edit,
+            self.pool_size,
+            self.locale,
+            self.run_mode,
+            &self.override_dict[..]
+        )
     }
 }
 
