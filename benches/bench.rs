@@ -8,10 +8,10 @@ use criterion::Criterion;
 use auto_correct::prelude::*;
 
 fn bench_base(c: &mut Criterion) {
-    c.bench_function("auto_correct: 'tets'", |b| {
-        let mut service = AutoCorrect::new();
-        service.set_max_edit(2);
+    let mut service = AutoCorrect::new();
+    service.set_max_edit(2);
 
+    c.bench_function("auto_correct: 'tets'", move |b| {
         b.iter(|| {
             let results = service.candidates(String::from("tets"));
             assert_eq!(results.len(), 367usize);
@@ -20,10 +20,10 @@ fn bench_base(c: &mut Criterion) {
 }
 
 fn bench_long(c: &mut Criterion) {
-    c.bench_function("auto_correct: 'wahtabout'", |b| {
-        let mut service = AutoCorrect::new();
-        service.set_max_edit(2);
+    let mut service = AutoCorrect::new();
+    service.set_max_edit(2);
 
+    c.bench_function("auto_correct: 'wahtabout'", move |b| {
         b.iter(|| {
             let results = service.candidates(String::from("wahtabout"));
             assert_eq!(results.len(), 1usize);

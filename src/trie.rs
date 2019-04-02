@@ -3,8 +3,10 @@ use channel::Receiver;
 
 use crate::common;
 use crate::support::en_us;
+use support::en_us::get_char_code;
 
 static mut DICT: Option<Node> = None;
+static mut BITMAP: [u32; 32] = [0; 32];
 
 #[derive(Debug)]
 pub(crate) struct Node {
@@ -30,6 +32,9 @@ impl Node {
 
     pub(crate) fn build(rx: Receiver<String>) {
         if let Some(root) = dict_mut() {
+
+            //TODO: build bit map
+
             for received in rx {
                 let temp: Vec<&str> = received.splitn(2, common::DELIM).collect();
                 if temp[0].is_empty() {
@@ -42,9 +47,12 @@ impl Node {
                     let clone = word.clone();
                     let mut chars = clone.chars();
                     let mut vec: Vec<char> = Vec::with_capacity(word.len());
+                    let mut pos = 0;
 
                     while let Some(rune) = chars.next() {
-                        vec.push(rune.clone());
+                        update_bitmap(rune, pos);
+                        vec.push(rune);
+                        pos += 1;
                     }
 
                     root.insert((word, score), vec.as_slice(), 0);
@@ -143,6 +151,22 @@ fn find_child_pos(children: &Vec<Node>, rune: char) -> (usize, char) {
     return (index, rune);
 }
 
+fn update_bitmap(rune: char, pos: usize) {
+    let char_code = get_char_code(rune);
+    let shift = if char_code < 31 { char_code } else { 31 };
+    let pos = if pos < 31 { pos } else { 31 };
+    let bitmap = bitmap_mut();
+
+    bitmap[pos] |= 1 << shift;
+}
+
+pub(crate) fn check_bitmap(char_code: &u8, pos: usize) -> bool {
+    let shift = if char_code < &31 { *char_code } else { 31 };
+    let bitmap = bitmap_mut();
+
+    (bitmap[pos] >> shift) & 1 == 1
+}
+
 #[inline]
 fn dict_ref() -> Option<&'static Node> {
     unsafe { DICT.as_ref() }
@@ -156,5 +180,17 @@ fn dict_mut() -> Option<&'static mut Node> {
         }
 
         DICT.as_mut()
+    }
+}
+
+#[inline]
+fn bitmap_ref() -> &'static [u32] {
+    unsafe { BITMAP.as_ref() }
+}
+
+#[inline]
+fn bitmap_mut() -> &'static mut [u32] {
+    unsafe {
+        BITMAP.as_mut()
     }
 }

@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::stores;
 use crate::SupportedLocale;
 use crate::support::en_us;
-use crate::trie::Node;
+use crate::trie::{check_bitmap, Node};
 
 pub static DELIM: &'static str = ",";
 pub static DEFAULT_LOCALE: &'static str = "en-us";
@@ -37,7 +37,8 @@ pub(crate) fn ins_repl(
         let rune_code = get_char_code(rune, 0);
 
         for pos in 0..=size {
-            if check_bit(marker, pos) {
+            if check_bit(marker, pos) || !check_bitmap(rune_code, pos) {
+                // early termination for duplicate or unrealistic cases
                 continue;
             }
 

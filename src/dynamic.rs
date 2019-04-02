@@ -23,7 +23,7 @@ pub(crate) fn candidate(
     if edit >= max_edit {
         return;
     }
-+
+
     let word = word.trim().to_lowercase();
     if word.is_empty() {
         return;
