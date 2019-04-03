@@ -1,6 +1,6 @@
 [package]
 name = "auto_correct"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Jacob Zuo <chopinsky@live.com>"]
 description = "A library to provide auto correct suggestions. Currently supporting EN-US."
 documentation = "https://docs.rs/auto_correct/"
